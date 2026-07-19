@@ -43,10 +43,12 @@ export default function TravelerDashboardPage() {
 
   const renderStatusBadge = (status: string) => {
     const base = "px-2.5 py-0.5 rounded-full text-2xs font-bold border uppercase tracking-wider";
-    if (status === 'UNLOCKED') return `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
-    if (status === 'LOCKED') return `${base} bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse`;
-    if (status === 'REJECTED') return `${base} bg-rose-500/10 text-rose-400 border-rose-500/20`;
-    return `${base} bg-slate-800 text-slate-400 border-slate-700/50`;
+    let classes = "";
+    if (status === 'UNLOCKED') classes = `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
+    else if (status === 'LOCKED') classes = `${base} bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse`;
+    else if (status === 'REJECTED') classes = `${base} bg-rose-500/10 text-rose-400 border-rose-500/20`;
+    else classes = `${base} bg-slate-800 text-slate-400 border-slate-700/50`;
+    return <span className={classes}>{status}</span>;
   };
 
   if (loading) {

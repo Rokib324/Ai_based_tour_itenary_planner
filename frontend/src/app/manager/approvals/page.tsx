@@ -95,10 +95,12 @@ export default function ApprovalWorkspacePage() {
 
   const renderStatusBadge = (status: string) => {
     const base = "px-2 py-0.5 rounded-full text-xs font-semibold border";
-    if (status === 'APPROVED') return `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
-    if (status === 'REJECTED') return `${base} bg-rose-500/10 text-rose-400 border-rose-500/20`;
-    if (status === 'SKIPPED') return `${base} bg-slate-800/80 text-slate-500 border-slate-700/30`;
-    return `${base} bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse`;
+    let classes = "";
+    if (status === 'APPROVED') classes = `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
+    else if (status === 'REJECTED') classes = `${base} bg-rose-500/10 text-rose-400 border-rose-500/20`;
+    else if (status === 'SKIPPED') classes = `${base} bg-slate-800/80 text-slate-500 border-slate-700/30`;
+    else classes = `${base} bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse`;
+    return <span className={classes}>{status}</span>;
   };
 
   return (
