@@ -229,7 +229,7 @@ export default function LandingHomePage() {
               <h2 className="text-2xl md:text-3xl font-extrabold">Stunning Pre-defined Packages</h2>
               <p className="text-slate-500 text-xs mt-1">Cloned and customized automatically matching traveler preferences</p>
             </div>
-            <Link href="/register" className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center space-x-1">
+            <Link href={user ? "/traveler/create-tour" : "/register"} className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center space-x-1">
               <span>View all AI packages</span>
               <ArrowRight className="h-3 w-3" />
             </Link>
@@ -271,7 +271,7 @@ export default function LandingHomePage() {
                   </div>
 
                   <Link 
-                    href="/register" 
+                    href={user ? "/traveler/create-tour" : "/register"} 
                     className="bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white p-2.5 rounded-xl transition-all"
                   >
                     <PlusIcon className="h-4 w-4" />

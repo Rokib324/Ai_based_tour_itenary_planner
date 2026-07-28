@@ -224,7 +224,7 @@ export default function ApprovalWorkspacePage() {
                       <div className="space-y-2 text-2xs text-slate-400 leading-relaxed">
                         <div className="flex justify-between">
                           <span>Approval Probability:</span>
-                          <span className="font-bold text-slate-200">{(aiReport.approval_probability * 100).toFixed(0)}%</span>
+                          <span className="font-bold text-slate-200">{Math.round(aiReport.approval_probability)}%</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Future Cost Forecast:</span>
@@ -232,7 +232,7 @@ export default function ApprovalWorkspacePage() {
                         </div>
                         {aiReport.weather_recommendations && (
                           <div className="border-t border-slate-850 pt-2 text-3xs text-amber-300">
-                            Weather Alert: {aiReport.weather_recommendations.alerts || 'Clear skies expected.'}
+                            Weather Alert: {aiReport.weather_recommendations.alert || 'Clear skies expected.'}
                           </div>
                         )}
                       </div>

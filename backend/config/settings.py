@@ -218,3 +218,6 @@ import sys
 if 'test' in sys.argv or 'verify_e2e' in sys.argv:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+
+# Google Gemini API key configuration
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')

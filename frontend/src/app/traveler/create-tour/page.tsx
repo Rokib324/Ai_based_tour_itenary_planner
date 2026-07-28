@@ -302,7 +302,10 @@ export default function CreateTourPage() {
                           </div>
                           <h3 className="font-bold text-slate-100">{pkg.title}</h3>
                           <p className="text-xs text-slate-400 leading-relaxed">{pkg.description}</p>
-                          <p className="text-xs font-semibold text-slate-400">Destination: {pkg.destination}</p>
+                          <div className="flex justify-between items-center text-xs pt-1">
+                            <span className="text-slate-400">Destination: <span className="text-slate-300 font-medium">{pkg.destination}</span></span>
+                            <span className="font-bold text-emerald-400">Est. Base Price: ${parseFloat(pkg.base_price).toFixed(2)}</span>
+                          </div>
                         </div>
                         <button 
                           onClick={() => handleApplyPackage(pkg)}

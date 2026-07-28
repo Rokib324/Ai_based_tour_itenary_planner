@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/utils/api';
-import { Compass, Sparkles, User, Calendar, CreditCard, ChevronRight, PlusCircle, LogOut } from 'lucide-react';
+import { Compass, Sparkles, User, Calendar, CreditCard, ChevronRight, PlusCircle, LogOut, ChevronDown, ChevronUp, CloudSun, AlertTriangle, ArrowRightLeft, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -25,6 +25,32 @@ export default function TravelerDashboardPage() {
   const [tours, setTours] = useState<Tour[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Expanded tour AI state
+  const [expandedTourId, setExpandedTourId] = useState<number | null>(null);
+  const [aiReports, setAiReports] = useState<Record<number, any>>({});
+  const [loadingAI, setLoadingAI] = useState<Record<number, boolean>>({});
+
+  const toggleExpandTour = async (tourId: number) => {
+    if (expandedTourId === tourId) {
+      setExpandedTourId(null);
+      return;
+    }
+    
+    setExpandedTourId(tourId);
+    
+    if (!aiReports[tourId]) {
+      setLoadingAI(prev => ({ ...prev, [tourId]: true }));
+      try {
+        const res = await api.get(`tours/tours/${tourId}/ai-analysis/`);
+        setAiReports(prev => ({ ...prev, [tourId]: res.data }));
+      } catch (err) {
+        console.error('Failed to fetch AI analysis for tour:', tourId, err);
+      } finally {
+        setLoadingAI(prev => ({ ...prev, [tourId]: false }));
+      }
+    }
+  };
 
   const fetchTours = async () => {
     try {
@@ -148,40 +174,170 @@ export default function TravelerDashboardPage() {
               {tours.map((t) => (
                 <div 
                   key={t.id} 
-                  className="bg-slate-950/80 border border-slate-850 p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-slate-800 transition-all"
+                  className="bg-slate-950/80 border border-slate-850 rounded-2xl overflow-hidden hover:border-slate-800 transition-all"
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-3">
-                      <h4 className="font-bold text-slate-200 text-base">{t.title}</h4>
-                      {renderStatusBadge(t.status)}
-                    </div>
-                    <div className="flex flex-wrap gap-4 text-slate-500 text-2xs">
-                      <div className="flex items-center space-x-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>{t.start_date} to {t.end_date}</span>
+                  <div className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <h4 className="font-bold text-slate-200 text-base">{t.title}</h4>
+                        {renderStatusBadge(t.status)}
                       </div>
-                      <span className="bg-slate-900 px-2 py-0.5 rounded text-slate-400 font-semibold uppercase tracking-wider">
-                        Tier: {t.budget_tier}
-                      </span>
+                      <div className="flex flex-wrap gap-4 text-slate-500 text-2xs">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{t.start_date} to {t.end_date}</span>
+                        </div>
+                        <span className="bg-slate-900 px-2 py-0.5 rounded text-slate-400 font-semibold uppercase tracking-wider">
+                          Tier: {t.budget_tier}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center space-x-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-900 pt-4 md:pt-0">
-                    <div className="text-left md:text-right">
-                      <span className="text-4xs uppercase tracking-widest text-slate-550 font-bold">Total Price</span>
-                      <p className="text-lg font-black text-emerald-400">${parseFloat(t.final_price).toFixed(2)}</p>
-                    </div>
+                    <div className="flex flex-wrap items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-900 pt-4 md:pt-0">
+                      <div className="text-left md:text-right">
+                        <span className="text-4xs uppercase tracking-widest text-slate-550 font-bold">Total Price</span>
+                        <p className="text-lg font-black text-emerald-400">${parseFloat(t.final_price).toFixed(2)}</p>
+                      </div>
 
-                    {t.status === 'LOCKED' && (
-                      <Link 
-                        href={`/traveler/checkout?tourId=${t.id}`}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold py-2.5 px-5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-lg shadow-emerald-500/15 animate-pulse"
+                      {t.status === 'LOCKED' && (
+                        <Link 
+                          href={`/traveler/checkout?tourId=${t.id}`}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold py-2.5 px-5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-lg shadow-emerald-500/15 animate-pulse"
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          <span>Pay to Unlock</span>
+                        </Link>
+                      )}
+
+                      <button
+                        onClick={() => toggleExpandTour(t.id)}
+                        className="flex items-center space-x-1 text-xs font-semibold text-slate-400 hover:text-emerald-400 py-2 px-3 border border-slate-850 hover:border-slate-700 rounded-xl transition-all"
                       >
-                        <CreditCard className="h-4 w-4" />
-                        <span>Pay to Unlock</span>
-                      </Link>
-                    )}
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>AI Insights</span>
+                        {expandedTourId === t.id ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
+                      </button>
+                    </div>
                   </div>
+
+                  {expandedTourId === t.id && (
+                    <div className="border-t border-slate-900 bg-slate-900/10 p-6 space-y-6">
+                      {loadingAI[t.id] ? (
+                        <div className="flex items-center justify-center py-6 space-x-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-emerald-500"></div>
+                          <span className="text-slate-400 text-xs">Consulting Antigravity AI Engine...</span>
+                        </div>
+                      ) : aiReports[t.id] ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                          
+                          {/* Approval probability card */}
+                          <div className="bg-slate-950/65 border border-slate-850 rounded-2xl p-5 space-y-3">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <Sparkles className="h-4 w-4 text-amber-400" />
+                              <span>Approval Chance</span>
+                            </h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-end">
+                                <span className="text-2xl font-black text-slate-100">{Math.round(aiReports[t.id].approval_probability)}%</span>
+                                <span className="text-3xs text-slate-500 font-semibold uppercase">Prediction score</span>
+                              </div>
+                              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                                <div 
+                                  className="bg-gradient-to-r from-emerald-500 to-teal-400 h-1.5 rounded-full" 
+                                  style={{ width: `${aiReports[t.id].approval_probability}%` }}
+                                ></div>
+                              </div>
+                              <p className="text-3xs text-slate-500 leading-normal">
+                                Likelihood of manager sign-off calculated from historic slots availability and price markups.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Cost prediction card */}
+                          <div className="bg-slate-950/65 border border-slate-850 rounded-2xl p-5 space-y-3">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <TrendingUp className="h-4 w-4 text-emerald-400" />
+                              <span>Future Price Forecast</span>
+                            </h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-end">
+                                <span className="text-2xl font-black text-emerald-400">${aiReports[t.id].future_cost_prediction?.toFixed(2)}</span>
+                                <span className="text-3xs text-slate-500 font-semibold uppercase">Estimated</span>
+                              </div>
+                              <p className="text-3xs text-slate-500 leading-normal">
+                                Forecasted price for this itinerary starting on {t.start_date} based on inflation and seasonal multipliers.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Weather prediction card */}
+                          <div className="bg-slate-950/65 border border-slate-850 rounded-2xl p-5 space-y-3">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <CloudSun className="h-4 w-4 text-teal-400" />
+                              <span>Weather Insights</span>
+                            </h5>
+                            <div className="space-y-1.5 text-2xs">
+                              {aiReports[t.id].weather_recommendations ? (
+                                <>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500">Condition:</span>
+                                    <span className="font-bold text-slate-300">{aiReports[t.id].weather_recommendations.condition} ({aiReports[t.id].weather_recommendations.temp})</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500">Best Season:</span>
+                                    <span className="font-semibold text-slate-300 text-right">{aiReports[t.id].weather_recommendations.best_months}</span>
+                                  </div>
+                                  {aiReports[t.id].weather_recommendations.alert && (
+                                    <div className="mt-2 text-3xs text-amber-300 bg-amber-500/5 border border-amber-500/10 p-1.5 rounded flex items-start gap-1">
+                                      <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400 mt-0.5" />
+                                      <span>{aiReports[t.id].weather_recommendations.alert}</span>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-slate-500">No weather recommendations available.</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Cheaper Alternatives card */}
+                          <div className="bg-slate-950/65 border border-slate-850 rounded-2xl p-5 space-y-3">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <ArrowRightLeft className="h-4 w-4 text-indigo-400" />
+                              <span>Smart Savings Suggestions</span>
+                            </h5>
+                            <div className="space-y-2 max-h-[120px] overflow-y-auto pr-1">
+                              {aiReports[t.id].cheaper_alternatives && aiReports[t.id].cheaper_alternatives.length > 0 ? (
+                                <div className="space-y-2">
+                                  {aiReports[t.id].cheaper_alternatives.map((alt: any, altIdx: number) => (
+                                    <div key={altIdx} className="bg-slate-900/60 p-2 rounded-lg border border-slate-850 flex flex-col space-y-1 text-3xs">
+                                      <div className="flex justify-between font-bold text-slate-300">
+                                        <span>{alt.item_type}: {alt.alt_name}</span>
+                                        <span className="text-emerald-400 font-extrabold">Save ${alt.savings?.toFixed(2)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-slate-500">
+                                        <span>Current: ${alt.current_price?.toFixed(2)}</span>
+                                        <span>Alternative: ${alt.alt_price?.toFixed(2)}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-3xs text-slate-500 py-3 text-center border border-dashed border-slate-850 rounded-lg">
+                                  Optimization optimal! No cheaper alternatives found.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      ) : (
+                        <div className="text-slate-500 text-xs text-center py-4">
+                          Failed to load AI Insights report.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               {tours.length === 0 && (

@@ -14,6 +14,7 @@ interface UserProfile {
     address: string;
     preferred_budget_tier: string;
     preferred_travel_style: string;
+    preferred_food: string;
   };
 }
 

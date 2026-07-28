@@ -1,11 +1,19 @@
 import os
+# pyrefly: ignore [missing-import]
 import joblib
+# pyrefly: ignore [missing-import]
 import numpy as np
+# pyrefly: ignore [missing-import]
 import pandas as pd
+# pyrefly: ignore [missing-import]
 from django.core.management.base import BaseCommand
-from django.conf import settings
+# pyrefly: ignore [missing-import]
+from django.conf import settings    
+# pyrefly: ignore [missing-import]
 from sklearn.model_selection import train_test_split
+# pyrefly: ignore [missing-import]
 from sklearn.linear_model import LogisticRegression, LinearRegression
+# pyrefly: ignore [missing-import]
 from sklearn.preprocessing import StandardScaler
 
 class Command(BaseCommand):
