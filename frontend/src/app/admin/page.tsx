@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/utils/api';
-import { ShieldCheck, LogOut, DollarSign, Users, Compass, Activity, Check, X, RefreshCw } from 'lucide-react';
+import { ShieldCheck, LogOut, DollarSign, Users, Compass, Activity, Check, X, RefreshCw, CheckCircle, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 interface AdminMetrics {
   total_users: number;
@@ -51,17 +52,20 @@ export default function AdminDashboardPage() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [payments, setPayments] = useState<PaymentLog[]>([]);
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [pendingTours, setPendingTours] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [processingUser, setProcessingUser] = useState<number | null>(null);
+  const [processingTour, setProcessingTour] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const loadData = async () => {
     setError('');
     try {
-      const [dashRes, usersRes] = await Promise.all([
+      const [dashRes, usersRes, toursRes] = await Promise.all([
         api.get('analytics/dashboard/admin/'),
         api.get('auth/pending-approvals/'),
+        api.get('approvals/queue/'),
       ]);
       
       setMetrics(dashRes.data.metrics);
@@ -69,6 +73,7 @@ export default function AdminDashboardPage() {
       setActivityLogs(dashRes.data.recent_activity_logs);
       setPayments(dashRes.data.recent_payments);
       setPendingUsers(usersRes.data);
+      setPendingTours(toursRes.data || []);
     } catch (err) {
       setError('Failed to fetch dashboard intelligence.');
     } finally {
@@ -78,18 +83,34 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 3000); // Live poll admin metrics & queues
+    return () => clearInterval(interval);
   }, []);
 
   const handleApproveRejectUser = async (userId: number, action: 'approve' | 'reject') => {
     setProcessingUser(userId);
     try {
       await api.post(`auth/approve/${userId}/`, { action });
-      // Reload lists
       loadData();
     } catch (err) {
       console.error('Failed to process registration action.', err);
     } finally {
       setProcessingUser(null);
+    }
+  };
+
+  const handleApproveRejectTour = async (workflowId: number, statusVal: 'APPROVED' | 'REJECTED') => {
+    setProcessingTour(workflowId);
+    try {
+      await api.post(`approvals/${workflowId}/action/`, {
+        status: statusVal,
+        comments: 'Approved by Admin portal',
+      });
+      loadData();
+    } catch (err) {
+      console.error('Failed to process tour approval action.', err);
+    } finally {
+      setProcessingTour(null);
     }
   };
 
@@ -110,7 +131,7 @@ export default function AdminDashboardPage() {
         <div className="max-w-7xl mx-auto space-y-8">
           
           {/* Top Bar */}
-          <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800 p-6 rounded-3xl backdrop-blur-xl">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-slate-900/40 border border-slate-800 p-6 rounded-3xl backdrop-blur-xl gap-4">
             <div className="flex items-center space-x-3">
               <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20 text-emerald-400">
                 <ShieldCheck className="h-6 w-6" />
@@ -119,11 +140,18 @@ export default function AdminDashboardPage() {
                 <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
                   System Admin Portal
                 </h1>
-                <p className="text-slate-400 text-xs">Platform Financials & Audits</p>
+                <p className="text-slate-400 text-xs">Platform Financials &amp; Audits</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/manager/approvals"
+                className="inline-flex items-center space-x-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+              >
+                <span>Full Approvals Workspace</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
               <button 
                 onClick={loadData}
                 className="p-2.5 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-white transition-colors"
@@ -234,6 +262,73 @@ export default function AdminDashboardPage() {
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-slate-500">
                             No registrations pending admin sign-off.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Tour Approvals Queue */}
+              <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold flex items-center space-x-2">
+                    <Compass className="h-5 w-5 text-emerald-400" />
+                    <span>Pending Tour Itinerary Approvals</span>
+                    <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                      {pendingTours.length}
+                    </span>
+                  </h2>
+                  <Link
+                    href="/manager/approvals"
+                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center space-x-1"
+                  >
+                    <span>Full Workspace</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-850">
+                        <th className="py-3 px-4">Tour Title</th>
+                        <th className="py-3 px-4">Traveler</th>
+                        <th className="py-3 px-4">Estimated Cost</th>
+                        <th className="py-3 px-4 text-right">Admin Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {pendingTours.map((wf: any) => (
+                        <tr key={wf.id} className="hover:bg-slate-850/30">
+                          <td className="py-4 px-4 font-bold text-slate-200">{wf.tour_details?.title}</td>
+                          <td className="py-4 px-4 text-slate-400">{wf.tour_details?.traveler?.email || wf.tour_details?.traveler?.username}</td>
+                          <td className="py-4 px-4 text-emerald-400 font-extrabold">${wf.tour_details?.final_price}</td>
+                          <td className="py-4 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleApproveRejectTour(wf.id, 'REJECTED')}
+                              disabled={processingTour === wf.id}
+                              className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold transition-all text-2xs inline-flex items-center space-x-1"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              <span>Reject</span>
+                            </button>
+                            <button
+                              onClick={() => handleApproveRejectTour(wf.id, 'APPROVED')}
+                              disabled={processingTour === wf.id}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black transition-all text-2xs inline-flex items-center space-x-1 shadow-md shadow-emerald-500/20"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Approve Tour</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {pendingTours.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-slate-500">
+                            No tours pending admin checkpoint sign-off.
                           </td>
                         </tr>
                       )}

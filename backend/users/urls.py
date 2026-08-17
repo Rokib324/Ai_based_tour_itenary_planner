@@ -7,7 +7,8 @@ from users.views import (
     LogoutView,
     PendingApprovalsListView,
     ApproveUserView,
-    UserProfileView
+    UserProfileView,
+    ChangePasswordView
 )
 
 urlpatterns = [
@@ -17,6 +18,7 @@ urlpatterns = [
     path('refresh/', TokenRefreshView.as_view(), name='auth_token_refresh'),
     path('logout/', LogoutView.as_view(), name='auth_logout'),
     path('profile/', UserProfileView.as_view(), name='auth_profile'),
+    path('change-password/', ChangePasswordView.as_view(), name='auth_change_password'),
     
     # Registration Admin workflows
     path('pending-approvals/', PendingApprovalsListView.as_view(), name='auth_pending_approvals'),

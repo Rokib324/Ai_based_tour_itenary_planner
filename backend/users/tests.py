@@ -17,15 +17,15 @@ class AuthTests(APITestCase):
             is_email_verified=True
         )
         
-        # Test registration payload
+        # Test registration payload for service manager
         self.register_data = {
-            'email': 'traveler@travel.com',
-            'username': 'traveler_john',
-            'password': 'TravelerPassword123',
-            'password_confirm': 'TravelerPassword123',
-            'role': User.Roles.TRAVELER,
+            'email': 'manager@travel.com',
+            'username': 'manager_flight',
+            'password': 'ManagerPassword123',
+            'password_confirm': 'ManagerPassword123',
+            'role': User.Roles.FLIGHT_MANAGER,
             'phone_number': '1234567890',
-            'address': '123 Travel Lane'
+            'address': '123 Service Lane'
         }
 
     def test_registration_flow_and_admin_approval(self):
@@ -34,33 +34,33 @@ class AuthTests(APITestCase):
         response = self.client.post(register_url, self.register_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         
-        user = User.objects.get(email='traveler@travel.com')
+        user = User.objects.get(email='manager@travel.com')
         self.assertEqual(user.status, User.Status.PENDING)
         self.assertFalse(user.is_email_verified)
         
-        # 2. Try Login (Should fail because email is not verified and status is PENDING)
+        # 2. Try Login (Returns token with user status PENDING so frontend can route to /pending)
         login_url = reverse('auth_login')
         login_data = {
-            'email': 'traveler@travel.com',
-            'password': 'TravelerPassword123'
+            'email': 'manager@travel.com',
+            'password': 'ManagerPassword123'
         }
         response = self.client.post(login_url, login_data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertIn("detail", response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['status'], User.Status.PENDING)
         
         # 3. Verify Email
         verify_url = reverse('auth_verify_email')
-        response = self.client.get(f"{verify_url}?email=traveler@travel.com")
+        response = self.client.get(f"{verify_url}?email=manager@travel.com")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         user.refresh_from_db()
         self.assertTrue(user.is_email_verified)
         self.assertEqual(user.status, User.Status.PENDING)
         
-        # 4. Try Login again (Should still fail because Admin has not approved yet)
+        # 4. Try Login again (User status remains PENDING until Admin approves)
         response = self.client.post(login_url, login_data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(response.data['detail'], "Your account is pending admin approval.")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['status'], User.Status.PENDING)
         
         # 5. Authenticate Admin to fetch pending approvals
         self.client.force_authenticate(user=self.admin_user)

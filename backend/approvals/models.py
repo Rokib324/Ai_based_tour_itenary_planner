@@ -31,19 +31,20 @@ class TourApproval(models.Model):
     def run_decision_engine(self):
         """
         Decision Engine Logic:
-        If admin and all active service checkpoints are approved -> Final status = APPROVED.
-        If any checkpoint is rejected -> Final status = REJECTED.
+        If all active service checkpoints (Flight, Hotel, Restaurant, Ride) are approved/skipped
+        and admin has not rejected -> Final status = APPROVED, Tour status = LOCKED (awaiting payment).
+        If any checkpoint is rejected -> Final status = REJECTED, Tour status = REJECTED.
         Otherwise, remain PENDING.
         """
-        statuses = [
-            self.admin_status,
+        service_statuses = [
             self.flight_status,
             self.hotel_status,
             self.restaurant_status,
             self.ride_status
         ]
+        all_statuses = [self.admin_status] + service_statuses
 
-        if ApprovalStatus.REJECTED in statuses:
+        if ApprovalStatus.REJECTED in all_statuses:
             self.decision_engine_status = ApprovalStatus.REJECTED
             self.tour.status = Tour.Status.REJECTED
             
@@ -54,7 +55,8 @@ class TourApproval(models.Model):
                 subject="Tour Plan Update: Rejected",
                 message=f"We regret to inform you that your tour plan '{self.tour.title}' was rejected during approval review."
             )
-        elif all(s in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] for s in statuses):
+        elif all(s in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] for s in service_statuses):
+            self.admin_status = ApprovalStatus.APPROVED
             self.decision_engine_status = ApprovalStatus.APPROVED
             self.tour.status = Tour.Status.LOCKED  # Transition tour to Locked state, awaiting payment
             

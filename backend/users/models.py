@@ -67,8 +67,13 @@ class User(AbstractUser):
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    full_name = models.CharField(max_length=150, blank=True, null=True)
+    bio = models.TextField(blank=True, null=True)
+    avatar_url = models.CharField(max_length=500, blank=True, null=True)
+    phone_number = models.CharField(max_length=30, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
     profile_image = models.ImageField(upload_to='profiles/', blank=True, null=True)
     
     # Preference parameters for AI Engine
@@ -77,8 +82,9 @@ class Profile(models.Model):
         choices=[('BUDGET', 'Budget'), ('STANDARD', 'Standard'), ('LUXURY', 'Luxury')],
         default='STANDARD'
     )
-    preferred_travel_style = models.CharField(max_length=50, blank=True, null=True)  # e.g., Adventure, Relaxing, Cultural
+    preferred_travel_style = models.CharField(max_length=100, blank=True, null=True)  # e.g., Adventure, Relaxing, Cultural
     preferred_food = models.CharField(max_length=100, blank=True, null=True)
+    preferred_transport = models.CharField(max_length=100, blank=True, null=True, default='Flight & Road Trip')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

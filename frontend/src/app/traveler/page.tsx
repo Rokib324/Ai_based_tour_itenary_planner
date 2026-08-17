@@ -65,17 +65,25 @@ export default function TravelerDashboardPage() {
 
   useEffect(() => {
     fetchTours();
+    const interval = setInterval(fetchTours, 3000); // Live poll every 3 seconds for dynamic manager updates
+    return () => clearInterval(interval);
   }, []);
 
   const renderStatusBadge = (status: string) => {
-    const base = "px-2.5 py-0.5 rounded-full text-2xs font-bold border uppercase tracking-wider";
-    let classes = "";
-    if (status === 'UNLOCKED') classes = `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
-    else if (status === 'LOCKED') classes = `${base} bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse`;
-    else if (status === 'REJECTED') classes = `${base} bg-rose-500/10 text-rose-400 border-rose-500/20`;
-    else classes = `${base} bg-slate-800 text-slate-400 border-slate-700/50`;
-    return <span className={classes}>{status}</span>;
+    const base = "px-3 py-1 rounded-full text-2xs font-extrabold border uppercase tracking-wider flex items-center space-x-1.5 w-fit";
+    if (status === 'UNLOCKED') {
+      return <span className={`${base} bg-emerald-500/20 text-emerald-300 border-emerald-500/40`}>✅ PAID & UNLOCKED</span>;
+    }
+    if (status === 'LOCKED') {
+      return <span className={`${base} bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse`}>🔒 APPROVED — PAYMENT REQUIRED</span>;
+    }
+    if (status === 'REJECTED') {
+      return <span className={`${base} bg-rose-500/20 text-rose-300 border-rose-500/40`}>❌ REJECTED</span>;
+    }
+    return <span className={`${base} bg-sky-500/10 text-sky-400 border-sky-500/30 animate-pulse`}>⏳ AWAITING APPROVALS</span>;
   };
+
+  const lockedTours = tours.filter(t => t.status === 'LOCKED');
 
   if (loading) {
     return (
@@ -90,11 +98,11 @@ export default function TravelerDashboardPage() {
 
   return (
     <ProtectedRoute allowedRoles={['TRAVELER', 'ADMIN', 'SUPER_ADMIN']}>
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
+      <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-12">
         <div className="max-w-6xl mx-auto space-y-8">
           
           {/* Header Topbar */}
-          <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800 p-6 rounded-3xl backdrop-blur-xl">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-slate-900/40 border border-slate-800 p-6 rounded-3xl backdrop-blur-xl gap-4">
             <div className="flex items-center space-x-3">
               <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20 text-emerald-400">
                 <Compass className="h-6 w-6" />
@@ -107,7 +115,7 @@ export default function TravelerDashboardPage() {
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-end">
               <Link 
                 href="/profile"
                 className="text-slate-400 hover:text-white text-xs font-semibold py-2 px-3 border border-slate-800 hover:border-slate-700 rounded-xl transition-all"
@@ -123,6 +131,30 @@ export default function TravelerDashboardPage() {
               </button>
             </div>
           </div>
+
+          {/* Prominent Payment Alert Banner for LOCKED tours */}
+          {lockedTours.length > 0 && (
+            <div className="bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/10 border-2 border-emerald-500/50 p-6 rounded-3xl backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl shadow-emerald-500/10 animate-pulse">
+              <div className="flex items-center space-x-4">
+                <div className="bg-emerald-500 p-3 rounded-2xl text-slate-950 font-black shrink-0">
+                  <CreditCard className="h-7 w-7" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-white">🎉 Tour Approved! Payment Required</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    Your tour plan &quot;<span className="font-bold text-emerald-300">{lockedTours[0].title}</span>&quot; has been verified &amp; approved by all service managers! Complete payment now to lock in your reservation.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/traveler/checkout?tourId=${lockedTours[0].id}`}
+                className="w-full md:w-auto bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black py-3.5 px-6 rounded-xl text-sm transition-all transform hover:scale-105 shadow-xl shadow-emerald-500/30 flex items-center justify-center space-x-2 shrink-0"
+              >
+                <span>Proceed to Payment (${parseFloat(lockedTours[0].final_price).toFixed(2)})</span>
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
 
           {error && (
             <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 p-4 rounded-xl text-sm">
@@ -167,18 +199,18 @@ export default function TravelerDashboardPage() {
           </div>
 
           {/* Itineraries List */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 shadow-xl">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl">
             <h2 className="text-lg font-bold mb-6">Your Vacation Plans</h2>
             
             <div className="space-y-4">
               {tours.map((t) => (
                 <div 
                   key={t.id} 
-                  className="bg-slate-950/80 border border-slate-850 rounded-2xl overflow-hidden hover:border-slate-800 transition-all"
+                  className={`bg-slate-950/80 border rounded-2xl overflow-hidden transition-all ${t.status === 'LOCKED' ? 'border-emerald-500/60 shadow-lg shadow-emerald-500/10' : 'border-slate-850 hover:border-slate-800'}`}
                 >
                   <div className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <h4 className="font-bold text-slate-200 text-base">{t.title}</h4>
                         {renderStatusBadge(t.status)}
                       </div>
@@ -202,7 +234,7 @@ export default function TravelerDashboardPage() {
                       {t.status === 'LOCKED' && (
                         <Link 
                           href={`/traveler/checkout?tourId=${t.id}`}
-                          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold py-2.5 px-5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-lg shadow-emerald-500/15 animate-pulse"
+                          className="bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black py-3 px-6 rounded-xl text-xs flex items-center space-x-2 transition-all shadow-xl shadow-emerald-500/20 transform hover:scale-105"
                         >
                           <CreditCard className="h-4 w-4" />
                           <span>Pay to Unlock</span>

@@ -35,53 +35,25 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
     def queue(self, request):
         """
         Returns workflows currently waiting for the logged-in manager's action.
-        Implements sequential pipeline validation:
-        1. Admin review (PENDING)
-        2. Flight review (Admin APPROVED, Flight PENDING)
-        3. Hotel review (Flight APPROVED/SKIPPED, Hotel PENDING)
-        4. Restaurant review (Hotel APPROVED/SKIPPED, Restaurant PENDING)
-        5. Ride review (Restaurant APPROVED/SKIPPED, Ride PENDING)
+        Managers review their respective service checkpoint when it is PENDING.
         """
         user = request.user
-        queryset = TourApproval.objects.all()
+        queryset = TourApproval.objects.exclude(tour__status=Tour.Status.REJECTED)
 
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            # Admins act first
             queryset = queryset.filter(admin_status=ApprovalStatus.PENDING)
             
         elif user.role == User.Roles.FLIGHT_MANAGER:
-            # Flight managers act after Admin approvals
-            queryset = queryset.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status=ApprovalStatus.PENDING
-            )
+            queryset = queryset.filter(flight_status=ApprovalStatus.PENDING)
             
         elif user.role == User.Roles.HOTEL_MANAGER:
-            # Hotel managers act after flight checkpoint resolves
-            queryset = queryset.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status=ApprovalStatus.PENDING
-            )
+            queryset = queryset.filter(hotel_status=ApprovalStatus.PENDING)
             
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            # Restaurant managers act after hotel checkpoint resolves
-            queryset = queryset.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                restaurant_status=ApprovalStatus.PENDING
-            )
+            queryset = queryset.filter(restaurant_status=ApprovalStatus.PENDING)
             
         elif user.role == User.Roles.RIDE_MANAGER:
-            # Ride managers act after restaurant checkpoint resolves
-            queryset = queryset.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                restaurant_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                ride_status=ApprovalStatus.PENDING
-            )
+            queryset = queryset.filter(ride_status=ApprovalStatus.PENDING)
         else:
             return Response({"detail": "Travelers do not have a review queue."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -112,13 +84,10 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             
         # 2. Flight Verification
         elif user.role == User.Roles.FLIGHT_MANAGER:
-            if workflow.admin_status != ApprovalStatus.APPROVED:
-                return Response({"error": "Cannot action. Awaiting Admin approval first."}, status=status.HTTP_400_BAD_REQUEST)
             if workflow.flight_status != ApprovalStatus.PENDING:
                 return Response({"error": "Flight checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.flight_status = target_status
             
-            # Log Manager approval action
             ManagerApproval.objects.create(
                 workflow=workflow,
                 manager=user,
@@ -129,8 +98,6 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             
         # 3. Hotel Verification
         elif user.role == User.Roles.HOTEL_MANAGER:
-            if workflow.flight_status not in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] or workflow.admin_status != ApprovalStatus.APPROVED:
-                return Response({"error": "Cannot action. Previous checkpoints have not completed."}, status=status.HTTP_400_BAD_REQUEST)
             if workflow.hotel_status != ApprovalStatus.PENDING:
                 return Response({"error": "Hotel checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.hotel_status = target_status
@@ -145,8 +112,6 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
 
         # 4. Restaurant Verification
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            if workflow.hotel_status not in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] or workflow.admin_status != ApprovalStatus.APPROVED:
-                return Response({"error": "Cannot action. Previous checkpoints have not completed."}, status=status.HTTP_400_BAD_REQUEST)
             if workflow.restaurant_status != ApprovalStatus.PENDING:
                 return Response({"error": "Restaurant checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.restaurant_status = target_status
@@ -161,8 +126,6 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
 
         # 5. Ride Verification
         elif user.role == User.Roles.RIDE_MANAGER:
-            if workflow.restaurant_status not in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] or workflow.admin_status != ApprovalStatus.APPROVED:
-                return Response({"error": "Cannot action. Previous checkpoints have not completed."}, status=status.HTTP_400_BAD_REQUEST)
             if workflow.ride_status != ApprovalStatus.PENDING:
                 return Response({"error": "Ride checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.ride_status = target_status

@@ -50,6 +50,8 @@ export default function ApprovalWorkspacePage() {
 
   useEffect(() => {
     fetchQueue();
+    const interval = setInterval(fetchQueue, 3000); // Live poll queue for updates
+    return () => clearInterval(interval);
   }, []);
 
   const handleSelectWorkflow = async (wf: ApprovalWorkflow) => {
@@ -243,6 +245,17 @@ export default function ApprovalWorkspacePage() {
 
                   {/* Decision fields */}
                   <div className="space-y-4">
+                    {success && (
+                      <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 p-3 rounded-xl text-xs font-semibold animate-pulse">
+                        {success}
+                      </div>
+                    )}
+                    {error && (
+                      <div className="bg-rose-500/15 border border-rose-500/40 text-rose-300 p-3 rounded-xl text-xs font-semibold">
+                        {error}
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">Review Remarks</label>
                       <textarea

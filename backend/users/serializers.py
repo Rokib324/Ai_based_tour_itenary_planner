@@ -14,10 +14,23 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    username = serializers.CharField(source='user.username', required=False)
 
     class Meta:
         model = Profile
-        fields = ('id', 'user', 'phone_number', 'address', 'preferred_budget_tier', 'preferred_travel_style', 'preferred_food')
+        fields = (
+            'id', 'user', 'username', 'full_name', 'bio', 'avatar_url',
+            'phone_number', 'address', 'city', 'country',
+            'preferred_budget_tier', 'preferred_travel_style', 'preferred_food', 'preferred_transport'
+        )
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        username = user_data.get('username')
+        if username:
+            instance.user.username = username
+            instance.user.save()
+        return super().update(instance, validated_data)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -41,17 +54,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         address = validated_data.pop('address', '')
         
         # Determine initial user status:
-        # According to specifications: Registration -> Pending Account -> Admin Approval -> Login.
-        # Standard users and service managers register with PENDING status.
-        status = User.Status.PENDING
+        # Traveler role is auto-approved on registration. Service managers require Admin approval.
+        user_role = validated_data.get('role', User.Roles.TRAVELER)
+        if user_role in [User.Roles.TRAVELER, 'TRAVELER']:
+            status = User.Status.APPROVED
+        else:
+            status = User.Status.PENDING
         
         user = User.objects.create_user(
             email=validated_data['email'],
             username=validated_data['username'],
             password=validated_data['password'],
-            role=validated_data['role'],
+            role=user_role,
             status=status,
-            is_active=True  # Django is_active determines auth; we restrict access via status check in login
+            is_active=True
         )
         
         # Profile is created automatically by post_save signal
@@ -68,12 +84,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         
         # Check approval status
-        if self.user.status == User.Status.PENDING:
-            raise AuthenticationFailed(
-                "Your account is pending admin approval.",
-                code="account_pending"
-            )
-        elif self.user.status == User.Status.REJECTED:
+        if self.user.status == User.Status.REJECTED:
             raise AuthenticationFailed(
                 "Your account registration was rejected by an administrator.",
                 code="account_rejected"

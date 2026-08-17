@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 from django.db import models
+# pyrefly: ignore [missing-import]
 from django.conf import settings
 
 class ActivityLog(models.Model):

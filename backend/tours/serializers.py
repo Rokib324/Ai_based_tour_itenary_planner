@@ -92,12 +92,22 @@ class TourSerializer(serializers.ModelSerializer):
         read_only_fields = ('traveler', 'base_cost', 'markup_percentage', 'final_price', 'status')
 
     def create(self, validated_data):
-        new_items_data = validated_data.pop('new_items', [])
+        new_items_data = validated_data.pop('new_items', None)
+        if new_items_data is None:
+            # Fallback to checking initial_data 'items' if passed by frontend
+            raw_items = self.initial_data.get('items', [])
+            item_serializer = TourItemCreateSerializer(data=raw_items, many=True)
+            if item_serializer.is_valid():
+                new_items_data = item_serializer.validated_data
+            else:
+                new_items_data = []
+
         package = validated_data.get('package', None)
         
         # Set current user as traveler
         request = self.context.get('request')
-        validated_data['traveler'] = request.user
+        if request and hasattr(request, 'user'):
+            validated_data['traveler'] = request.user
         
         if package:
             # If using package, budget tier is copied from package
@@ -112,6 +122,23 @@ class TourSerializer(serializers.ModelSerializer):
         # Calculate dynamic cost and final price
         tour.calculate_prices()
         tour.save()
+
+        # Initialize approval workflow checkpoints based on items attached
+        from approvals.models import TourApproval, ApprovalStatus
+        approval, created = TourApproval.objects.get_or_create(tour=tour)
+        has_flight = tour.items.filter(flight__isnull=False).exists()
+        has_hotel = tour.items.filter(hotel__isnull=False).exists()
+        has_restaurant = tour.items.filter(restaurant__isnull=False).exists()
+        has_ride = tour.items.filter(ride__isnull=False).exists()
+
+        approval.flight_status = ApprovalStatus.PENDING if has_flight else ApprovalStatus.SKIPPED
+        approval.hotel_status = ApprovalStatus.PENDING if has_hotel else ApprovalStatus.SKIPPED
+        approval.restaurant_status = ApprovalStatus.PENDING if has_restaurant else ApprovalStatus.SKIPPED
+        approval.ride_status = ApprovalStatus.PENDING if has_ride else ApprovalStatus.SKIPPED
+        approval.admin_status = ApprovalStatus.PENDING
+        approval.decision_engine_status = ApprovalStatus.PENDING
+        approval.save()
+
         return tour
 
     def update(self, instance, validated_data):
@@ -120,7 +147,12 @@ class TourSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Only tours in PENDING status can be updated.")
             
         new_items_data = validated_data.pop('new_items', None)
-        
+        if new_items_data is None and 'items' in self.initial_data:
+            raw_items = self.initial_data.get('items', [])
+            item_serializer = TourItemCreateSerializer(data=raw_items, many=True)
+            if item_serializer.is_valid():
+                new_items_data = item_serializer.validated_data
+
         # Update basic fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

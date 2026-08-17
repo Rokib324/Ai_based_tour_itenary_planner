@@ -10,11 +10,17 @@ interface UserProfile {
   status: string;
   is_email_verified: boolean;
   profile?: {
-    phone_number: string;
-    address: string;
-    preferred_budget_tier: string;
-    preferred_travel_style: string;
-    preferred_food: string;
+    full_name?: string;
+    bio?: string;
+    avatar_url?: string;
+    phone_number?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    preferred_budget_tier?: string;
+    preferred_travel_style?: string;
+    preferred_food?: string;
+    preferred_transport?: string;
   };
 }
 
@@ -52,12 +58,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.get('auth/profile/');
       const formattedUser: UserProfile = {
         ...res.data.user,
+        username: res.data.username || res.data.user?.username,
         profile: {
+          full_name: res.data.full_name || '',
+          bio: res.data.bio || '',
+          avatar_url: res.data.avatar_url || '',
           phone_number: res.data.phone_number || '',
           address: res.data.address || '',
+          city: res.data.city || '',
+          country: res.data.country || '',
           preferred_budget_tier: res.data.preferred_budget_tier || 'STANDARD',
           preferred_travel_style: res.data.preferred_travel_style || '',
-          preferred_food: res.data.preferred_food || ''
+          preferred_food: res.data.preferred_food || '',
+          preferred_transport: res.data.preferred_transport || 'Flight & Road Trip'
         }
       };
       setUser(formattedUser);
@@ -114,12 +127,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.put('auth/profile/', data);
       const formattedUser: UserProfile = {
         ...res.data.user,
+        username: res.data.username || res.data.user?.username,
         profile: {
+          full_name: res.data.full_name || '',
+          bio: res.data.bio || '',
+          avatar_url: res.data.avatar_url || '',
           phone_number: res.data.phone_number || '',
           address: res.data.address || '',
+          city: res.data.city || '',
+          country: res.data.country || '',
           preferred_budget_tier: res.data.preferred_budget_tier || 'STANDARD',
           preferred_travel_style: res.data.preferred_travel_style || '',
-          preferred_food: res.data.preferred_food || ''
+          preferred_food: res.data.preferred_food || '',
+          preferred_transport: res.data.preferred_transport || 'Flight & Road Trip'
         }
       };
       setUser(formattedUser);

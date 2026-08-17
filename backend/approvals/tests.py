@@ -68,32 +68,21 @@ class ApprovalsWorkflowTests(APITestCase):
 
         action_url = reverse('tour-approval-process-action', args=[workflow.id])
 
-        # 2. Try Hotel Manager signoff before Admin approval (Should return 400 Bad Request)
-        self.client.force_authenticate(user=self.hotel_manager)
-        response = self.client.post(action_url, {'status': ApprovalStatus.APPROVED, 'comments': 'Looks good'}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "Cannot action. Previous checkpoints have not completed.")
-
-        # 3. Admin Approves
+        # 2. Admin Approves
         self.client.force_authenticate(user=self.admin)
         response = self.client.post(action_url, {'status': ApprovalStatus.APPROVED, 'comments': 'Admin approved'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         workflow.refresh_from_db()
         self.assertEqual(workflow.admin_status, ApprovalStatus.APPROVED)
 
-        # 4. Try Hotel Manager signoff before Flight Manager (Should return 400 Bad Request)
-        self.client.force_authenticate(user=self.hotel_manager)
-        response = self.client.post(action_url, {'status': ApprovalStatus.APPROVED, 'comments': 'Room is available'}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-        # 5. Flight Manager Approves
+        # 3. Flight Manager Approves
         self.client.force_authenticate(user=self.flight_manager)
         response = self.client.post(action_url, {'status': ApprovalStatus.APPROVED, 'comments': 'Seats verified'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         workflow.refresh_from_db()
         self.assertEqual(workflow.flight_status, ApprovalStatus.APPROVED)
 
-        # 6. Hotel Manager Approves (now allowed)
+        # 4. Hotel Manager Approves
         self.client.force_authenticate(user=self.hotel_manager)
         response = self.client.post(action_url, {'status': ApprovalStatus.APPROVED, 'comments': 'Room verified'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
