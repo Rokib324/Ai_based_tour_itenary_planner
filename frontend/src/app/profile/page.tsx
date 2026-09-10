@@ -6,7 +6,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import api from '@/utils/api';
 import { 
   User, Shield, Compass, Save, ArrowLeft, Camera, Key, Lock, 
-  MapPin, Phone, Mail, Globe, CheckCircle2, Sparkles, AlertCircle, Heart 
+  MapPin, Phone, Mail, Globe, CheckCircle2, Sparkles, AlertCircle, Heart, Upload 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -77,6 +77,21 @@ export default function ProfilePage() {
       ...formData,
       [e.target.name]: e.target.value,
     });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMsg('Image size must be less than 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, avatar_url: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handlePasswordChangeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -375,12 +390,32 @@ export default function ProfilePage() {
                   <Camera className="h-5 w-5 text-emerald-400" />
                   <span>Choose Profile Avatar &amp; Photo</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">Select from curated traveler avatars or enter a direct image URL.</p>
+                <p className="text-xs text-slate-400 mt-1">Upload a custom image file from your device, choose from curated avatars, or enter an image URL.</p>
+              </div>
+
+              {/* Upload Custom File */}
+              <div className="bg-slate-950/80 border border-slate-850 p-6 rounded-2xl space-y-3">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Upload Custom Image File from Device
+                </label>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <label className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 bg-slate-900 hover:bg-slate-850 border border-emerald-500/40 hover:border-emerald-500/70 text-emerald-400 font-bold py-3 px-6 rounded-xl text-xs cursor-pointer transition-all shadow-md">
+                    <Upload className="h-4 w-4 text-emerald-400" />
+                    <span>Choose Image File...</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                  <span className="text-2xs text-slate-500">Supports JPG, PNG, WEBP, GIF (Max 5MB)</span>
+                </div>
               </div>
 
               {/* Preset Avatars Grid */}
               <div className="space-y-3">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Curated Presets</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Or Select Curated Presets</label>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
                   {PRESET_AVATARS.map((url, idx) => (
                     <div 
@@ -396,14 +431,14 @@ export default function ProfilePage() {
 
               {/* Custom Image URL Field */}
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Or Custom Image URL</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Or Paste Image Web Link / Data URL</label>
                 <input
                   type="text"
                   name="avatar_url"
                   value={formData.avatar_url}
                   onChange={handleChange}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50"
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono"
                 />
               </div>
 

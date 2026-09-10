@@ -158,11 +158,17 @@ class ManagerDashboardView(APIView):
 
         # Serialize inventory items managed by this user
         serialized_inventory = []
-        for item in inventory_items[:10]:
+        for item in inventory_items[:20]:
             item_details = {
                 'id': item.id,
                 'name': getattr(item, 'name', getattr(item, 'vehicle_type', 'Service')),
-                'is_available': item.is_available
+                'is_available': item.is_available,
+                'location': getattr(item, 'location', getattr(item, 'destination_city', 'All Service Areas')),
+                'departure_city': getattr(item, 'departure_city', None),
+                'destination_city': getattr(item, 'destination_city', None),
+                'provider_name': getattr(item, 'provider_name', None),
+                'room_type': getattr(item, 'room_type', None),
+                'cuisine': getattr(item, 'cuisine', None),
             }
             if hasattr(item, 'price'):
                 item_details['price'] = float(item.price)
