@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   Compass, Sparkles, ShieldCheck, CreditCard, ArrowRight, Plane,
@@ -9,6 +9,24 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+
+function useCountUp(target: number, duration = 1800) {
+  const [count, setCount] = useState(0);
+  const ref = useRef(false);
+  useEffect(() => {
+    if (ref.current) return;
+    ref.current = true;
+    let start = 0;
+    const step = target / (duration / 16);
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= target) { setCount(target); clearInterval(timer); }
+      else setCount(Math.floor(start));
+    }, 16);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+  return count;
+}
 
 export default function LandingHomePage() {
   const { user, role, logout } = useAuth();
@@ -54,10 +72,10 @@ export default function LandingHomePage() {
   ];
 
   const stats = [
-    { value: '50K+', label: 'Trips Planned' },
-    { value: '120+', label: 'Destinations' },
-    { value: '4.9★', label: 'Avg. Rating' },
-    { value: '99%', label: 'Approval Rate' },
+    { value: '50K+', label: 'Trips Planned', num: 50000, suffix: 'K+', divisor: 1000 },
+    { value: '120+', label: 'Destinations', num: 120, suffix: '+', divisor: 1 },
+    { value: '4.9★', label: 'Avg. Rating', num: null, suffix: '' },
+    { value: '99%', label: 'Approval Rate', num: null, suffix: '' },
   ];
 
   const tierColor: Record<string, string> = {
@@ -169,6 +187,20 @@ export default function LandingHomePage() {
                 <div key={i}>
                   <p className="text-2xl font-black text-white">{s.value}</p>
                   <p className="text-white/50 text-xs font-medium uppercase tracking-wider">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Floating Trust Badges */}
+            <div className="flex flex-wrap gap-3 pt-2">
+              {[
+                { icon: '🛡️', text: 'Manager Verified' },
+                { icon: '🤖', text: 'AI-Powered Matching' },
+                { icon: '🔒', text: 'Stripe Secured' },
+              ].map((b, i) => (
+                <div key={i} className="flex items-center gap-2 bg-white/8 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-full text-xs font-semibold text-white/70 hover:text-white hover:bg-white/12 transition-all cursor-default">
+                  <span>{b.icon}</span>
+                  <span>{b.text}</span>
                 </div>
               ))}
             </div>
@@ -389,17 +421,12 @@ export default function LandingHomePage() {
               <Link href="/login" className="hover:text-white transition-colors">Log In</Link>
               <Link href="/register" className="hover:text-white transition-colors">Register</Link>
             </div>
-            <p className="text-white/25 text-xs font-medium text-center md:text-right">&copy; 2026 SmartTravel Inc. Powered by Antigravity AI.</p>
+            <p className="text-white/25 text-xs font-medium text-center md:text-right">&copy; 2026 SmartTravel Inc.</p>
           </div>
         </div>
       </footer>
 
-      <style jsx global>{`
-        @keyframes marquee {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
-        }
-      `}</style>
+
     </div>
   );
 }
