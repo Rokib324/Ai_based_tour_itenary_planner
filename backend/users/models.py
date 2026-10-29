@@ -1,5 +1,9 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+import random
+import string
+from django.utils import timezone
+from datetime import timedelta
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
@@ -90,6 +94,37 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"Profile of {self.user.email}"
+
+
+class PasswordResetOTP(models.Model):
+    """
+    Stores a time-limited 6-digit OTP for password reset.
+    Expires after 10 minutes. Invalidated on use.
+    """
+    user      = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_otps')
+    otp       = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used   = models.BooleanField(default=False)
+
+    OTP_VALIDITY_MINUTES = 10
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"OTP for {self.user.email} at {self.created_at}"
+
+    @classmethod
+    def generate_for(cls, user):
+        """Invalidate old OTPs and create a fresh one."""
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+        otp_code = ''.join(random.choices(string.digits, k=6))
+        return cls.objects.create(user=user, otp=otp_code)
+
+    def is_valid(self):
+        """Return True if OTP is unused and within validity window."""
+        expiry = self.created_at + timedelta(minutes=self.OTP_VALIDITY_MINUTES)
+        return not self.is_used and timezone.now() < expiry
 
 
 from django.db.models.signals import post_save

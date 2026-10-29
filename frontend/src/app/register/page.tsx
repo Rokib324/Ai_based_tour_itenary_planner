@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, user, role, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [formData, setFormData] = useState({
@@ -22,6 +22,15 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  /* ── Redirect already-authenticated users away from this page ── */
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') router.replace('/admin');
+    else if (role === 'TRAVELER')                   router.replace('/traveler');
+    else                                            router.replace('/manager');
+  }, [authLoading, user, role, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -61,6 +70,15 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  /* Show spinner while auth resolves or redirect is in progress */
+  if (authLoading || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black p-4">

@@ -5,7 +5,8 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Compass, Sparkles, ShieldCheck, CreditCard, ArrowRight, Plane,
   MapPin, Star, ChevronDown, Menu, X, Globe, Cloud,
-  CheckCircle, Zap, Users, TrendingUp
+  CheckCircle, Zap, Users, TrendingUp, Hotel, Mountain, FileText,
+  ArrowLeftRight, Calendar, UserCheck, Search, Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -28,6 +29,345 @@ function useCountUp(target: number, duration = 1800) {
   return count;
 }
 
+/* ─────────────────────────────────────────────
+   TravelSearchForm – standalone component
+───────────────────────────────────────────── */
+const TABS = [
+  { id: 'flight', label: 'Flight', icon: '✈' },
+  { id: 'hotel',  label: 'Hotel',  icon: '🏨' },
+  { id: 'tour',   label: 'Tour',   icon: '🗺' },
+  { id: 'visa',   label: 'Visa',   icon: '📋' },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
+type TripType = 'one-way' | 'round-way' | 'multi-city';
+
+function TravelSearchForm() {
+  const [activeTab, setActiveTab] = useState<TabId>('flight');
+  const [tripType, setTripType]   = useState<TripType>('one-way');
+  const [from, setFrom]           = useState('Dhaka');
+  const [to,   setTo]             = useState("Cox's Bazar");
+  const [departure, setDeparture] = useState('');
+  const [returnDate, setReturnDate] = useState('');
+  const [travelers, setTravelers] = useState(1);
+  const [travelClass, setTravelClass] = useState('Economy');
+  const [showTravelerMenu, setShowTravelerMenu] = useState(false);
+
+  // Hotel-specific
+  const [checkIn,  setCheckIn]  = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [rooms, setRooms]       = useState(1);
+
+  // Tour-specific
+  const [destination, setDestination] = useState('');
+  const [tourDate,    setTourDate]    = useState('');
+  const [duration,    setDuration]    = useState('7 days');
+
+  // Visa-specific
+  const [fromCountry, setFromCountry] = useState('Bangladesh');
+  const [toCountry,   setToCountry]   = useState('');
+  const [travelPurpose, setTravelPurpose] = useState('Tourism');
+
+  const swapLocations = () => { setFrom(to); setTo(from); };
+
+  const classOptions = ['Economy', 'Premium Economy', 'Business', 'First Class'];
+
+  return (
+    <div className="w-full max-w-4xl mx-auto bg-white/[0.97] backdrop-blur-2xl rounded-3xl shadow-2xl shadow-black/40 overflow-visible">
+
+      {/* ── Tab bar ── */}
+      <div className="flex border-b border-gray-100">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all duration-200 first:rounded-tl-3xl last:rounded-tr-3xl
+              ${activeTab === tab.id
+                ? 'text-[#1a2b6b] border-b-2 border-[#f5a623] bg-white'
+                : 'text-gray-400 hover:text-gray-600 bg-gray-50/60 hover:bg-gray-50'
+              }`}
+          >
+            <span className="text-base">{tab.icon}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="px-5 pb-6 pt-4 space-y-4">
+
+        {/* ── FLIGHT TAB ── */}
+        {activeTab === 'flight' && (
+          <>
+            {/* Trip type radio */}
+            <div className="flex items-center gap-6 text-sm font-semibold text-gray-600">
+              {(['one-way', 'round-way', 'multi-city'] as TripType[]).map((t) => (
+                <label key={t} className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
+                    ${tripType === t ? 'border-[#1a2b6b]' : 'border-gray-300'}`}>
+                    {tripType === t && <span className="w-2 h-2 rounded-full bg-[#1a2b6b] block" />}
+                  </span>
+                  <input type="radio" className="sr-only" checked={tripType === t} onChange={() => setTripType(t)} />
+                  {t === 'one-way' ? 'One Way' : t === 'round-way' ? 'Round Way' : 'Multi City'}
+                </label>
+              ))}
+            </div>
+
+            {/* From / To / Dates / Travelers row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-stretch">
+
+              {/* FROM */}
+              <div className="relative flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors group">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From</p>
+                <input
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                  placeholder="City or Airport"
+                />
+                <p className="text-[10px] text-gray-400 truncate mt-0.5">DAC, Hazrat Shahjalal International Ai…</p>
+
+                {/* Swap button (positioned between From and To) */}
+                <button
+                  onClick={swapLocations}
+                  className="absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-[#1a2b6b] flex items-center justify-center shadow-lg hover:bg-[#253d9e] transition-colors hidden lg:flex"
+                >
+                  <span className="text-white text-xs font-bold">⇄</span>
+                </button>
+              </div>
+
+              {/* TO */}
+              <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">To</p>
+                <input
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                  placeholder="City or Airport"
+                />
+                <p className="text-[10px] text-gray-400 truncate mt-0.5">CXB, Cox's Bazar Airport</p>
+              </div>
+
+              {/* DEPARTURE DATE */}
+              <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  {tripType === 'round-way' ? 'Departure Date' : 'Travel Date'}
+                </p>
+                <input
+                  type="date"
+                  value={departure}
+                  onChange={(e) => setDeparture(e.target.value)}
+                  className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full"
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">Select your date</p>
+              </div>
+
+              {/* RETURN DATE or TRAVELER+CLASS */}
+              {tripType === 'round-way' ? (
+                <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Return Date</p>
+                  <input
+                    type="date"
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                    className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Save more on return</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTravelerMenu(!showTravelerMenu)}
+                    className="w-full flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors text-left"
+                  >
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Traveler, Class</p>
+                    <p className="text-lg font-black text-[#1a2b6b]">{travelers} Traveler{travelers > 1 ? 's' : ''}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{travelClass}</p>
+                  </button>
+                  {showTravelerMenu && (
+                    <div className="absolute top-full mt-2 left-0 right-0 z-50 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-gray-700">Travelers</span>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => setTravelers(Math.max(1, travelers - 1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold text-base">−</button>
+                          <span className="w-5 text-center font-black text-[#1a2b6b]">{travelers}</span>
+                          <button onClick={() => setTravelers(Math.min(12, travelers + 1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold text-base">+</button>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-gray-700 block mb-2">Class</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {classOptions.map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => { setTravelClass(c); setShowTravelerMenu(false); }}
+                              className={`text-xs font-semibold py-1.5 px-2 rounded-lg transition-all
+                                ${travelClass === c ? 'bg-[#1a2b6b] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >{c}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <button onClick={() => setShowTravelerMenu(false)} className="w-full text-xs font-bold text-[#1a2b6b] hover:underline text-right">Done</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Traveler+Class when round-way (extra row) */}
+            {tripType === 'round-way' && (
+              <div className="relative max-w-xs">
+                <button
+                  onClick={() => setShowTravelerMenu(!showTravelerMenu)}
+                  className="w-full flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors text-left"
+                >
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Traveler, Class</p>
+                  <p className="text-lg font-black text-[#1a2b6b]">{travelers} Traveler{travelers > 1 ? 's' : ''}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{travelClass}</p>
+                </button>
+                {showTravelerMenu && (
+                  <div className="absolute top-full mt-2 left-0 z-50 w-64 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-700">Travelers</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setTravelers(Math.max(1, travelers - 1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold text-base">−</button>
+                        <span className="w-5 text-center font-black text-[#1a2b6b]">{travelers}</span>
+                        <button onClick={() => setTravelers(Math.min(12, travelers + 1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold text-base">+</button>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-gray-700 block mb-2">Class</span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {classOptions.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => { setTravelClass(c); setShowTravelerMenu(false); }}
+                            className={`text-xs font-semibold py-1.5 px-2 rounded-lg transition-all
+                              ${travelClass === c ? 'bg-[#1a2b6b] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                          >{c}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={() => setShowTravelerMenu(false)} className="w-full text-xs font-bold text-[#1a2b6b] hover:underline text-right">Done</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── HOTEL TAB ── */}
+        {activeTab === 'hotel' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-stretch">
+            <div className="lg:col-span-2 flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Destination / Hotel</p>
+              <input
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                placeholder="City, area or hotel name"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Where are you going?</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Check-In</p>
+              <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full" />
+              <p className="text-[10px] text-gray-400 mt-0.5">Arrival date</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Check-Out · Rooms</p>
+              <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full" />
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-[10px] text-gray-400">Rooms:</p>
+                <button onClick={() => setRooms(Math.max(1, rooms - 1))} className="text-gray-500 hover:text-[#1a2b6b] font-bold text-xs">−</button>
+                <span className="text-[10px] font-black text-[#1a2b6b]">{rooms}</span>
+                <button onClick={() => setRooms(Math.min(10, rooms + 1))} className="text-gray-500 hover:text-[#1a2b6b] font-bold text-xs">+</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TOUR TAB ── */}
+        {activeTab === 'tour' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-stretch">
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Destination</p>
+              <input
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                placeholder="Where to?"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">City or country</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Tour Start Date</p>
+              <input type="date" value={tourDate} onChange={(e) => setTourDate(e.target.value)} className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full" />
+              <p className="text-[10px] text-gray-400 mt-0.5">When do you depart?</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Duration</p>
+              <select value={duration} onChange={(e) => setDuration(e.target.value)} className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full">
+                {['3 days', '5 days', '7 days', '10 days', '14 days', '21 days', '30 days'].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">Trip length</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── VISA TAB ── */}
+        {activeTab === 'visa' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-stretch">
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Your Nationality</p>
+              <input
+                value={fromCountry}
+                onChange={(e) => setFromCountry(e.target.value)}
+                className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                placeholder="e.g. Bangladesh"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Passport country</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Destination Country</p>
+              <input
+                value={toCountry}
+                onChange={(e) => setToCountry(e.target.value)}
+                className="text-lg font-black text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+                placeholder="e.g. Japan"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Where are you going?</p>
+            </div>
+            <div className="flex flex-col justify-between border border-gray-200 rounded-2xl px-4 py-3 bg-white hover:border-[#1a2b6b]/40 transition-colors">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Travel Purpose</p>
+              <select value={travelPurpose} onChange={(e) => setTravelPurpose(e.target.value)} className="text-base font-black text-[#1a2b6b] bg-transparent outline-none w-full">
+                {['Tourism', 'Business', 'Study', 'Work', 'Medical', 'Family Visit', 'Transit'].map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">Reason for travel</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Search Button ── */}
+        <div className="flex justify-center pt-1">
+          <Link
+            href="/register"
+            className="bg-[#f5a623] hover:bg-[#e09510] text-white font-black text-base py-3.5 px-14 rounded-2xl transition-all shadow-lg shadow-[#f5a623]/30 hover:shadow-[#f5a623]/50 flex items-center gap-2 hover:scale-105 active:scale-95"
+          >
+            🔍 Search
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main Page
+───────────────────────────────────────────── */
 export default function LandingHomePage() {
   const { user, role, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -147,52 +487,48 @@ export default function LandingHomePage() {
       </header>
 
       {/* HERO */}
-      <section className="relative min-h-screen flex items-end pb-20 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center pb-16 pt-28 overflow-hidden">
         <div className="absolute inset-0">
           <Image src="/hero_beach.jpg" alt="Luxury tropical beach resort aerial view" fill priority className="object-cover object-center" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-[#0c0d10]" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d10]/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-[#0c0d10]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d10]/40 via-transparent to-[#0c0d10]/40" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-6 w-full">
-          <div className="max-w-3xl space-y-8">
+        <div className="relative max-w-7xl mx-auto px-6 w-full flex flex-col items-center gap-10">
+
+          {/* ── Hero text (centered above the form) ── */}
+          <div className="text-center space-y-5 max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full text-xs font-semibold text-white/90 tracking-wide">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
               AI-Powered Itinerary Planning · Approved by Experts
             </div>
 
-            <div className="space-y-3">
-              <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight">
-                Plan smarter.<br />
-                <span className="text-emerald-400">Travel better.</span>
-              </h1>
-              <p className="text-white/70 text-base md:text-lg leading-relaxed max-w-xl mt-6">
-                SmartTravel combines an AI recommendation engine, sequential manager approvals, and real-time weather data to build your perfect custom vacation — end to end.
-              </p>
-            </div>
+            <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight drop-shadow-2xl">
+              Plan smarter.<br />
+              <span className="text-emerald-400">Travel better.</span>
+            </h1>
+            <p className="text-white/80 text-base md:text-lg leading-relaxed max-w-2xl mx-auto drop-shadow-lg">
+              SmartTravel combines an AI recommendation engine, sequential manager approvals, and real-time weather data to build your perfect custom vacation — end to end.
+            </p>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link href={user ? getDashboardLink() : '/register'} className="group bg-emerald-500 hover:bg-emerald-400 text-black font-black text-base py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40">
-                Start Planning Free
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
-              <a href="#destinations" className="bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 text-white font-bold text-base py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2">
-                Explore Destinations
-                <ChevronDown className="w-4 h-4" />
-              </a>
-            </div>
+          {/* ── Search Form ── */}
+          <div className="w-full max-w-5xl">
+            <TravelSearchForm />
+          </div>
 
-            <div className="flex flex-wrap gap-x-10 gap-y-3 pt-4 border-t border-white/10">
+          {/* ── Stats + Trust Badges ── */}
+          <div className="flex flex-col items-center gap-5 mt-2">
+            <div className="flex flex-wrap justify-center gap-x-10 gap-y-3 border-t border-white/10 pt-5">
               {stats.map((s, i) => (
-                <div key={i}>
-                  <p className="text-2xl font-black text-white">{s.value}</p>
+                <div key={i} className="text-center">
+                  <p className="text-2xl font-black text-white drop-shadow">{s.value}</p>
                   <p className="text-white/50 text-xs font-medium uppercase tracking-wider">{s.label}</p>
                 </div>
               ))}
             </div>
 
-            {/* Floating Trust Badges */}
-            <div className="flex flex-wrap gap-3 pt-2">
+            <div className="flex flex-wrap justify-center gap-3">
               {[
                 { icon: '🛡️', text: 'Manager Verified' },
                 { icon: '🤖', text: 'AI-Powered Matching' },
@@ -204,7 +540,19 @@ export default function LandingHomePage() {
                 </div>
               ))}
             </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 pt-2">
+              <Link href={user ? getDashboardLink() : '/register'} className="group bg-emerald-500 hover:bg-emerald-400 text-black font-black text-base py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40">
+                Start Planning Free
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+              <a href="#destinations" className="bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 text-white font-bold text-base py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2">
+                Explore Destinations
+                <ChevronDown className="w-4 h-4" />
+              </a>
+            </div>
           </div>
+
         </div>
       </section>
 

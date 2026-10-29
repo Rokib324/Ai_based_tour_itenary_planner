@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
-from users.models import Profile
+from users.models import Profile, PasswordResetOTP
 from users.serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -13,6 +13,8 @@ from users.serializers import (
 )
 from notifications.utils import notify_user
 from analytics.utils import log_activity
+from django.core.mail import send_mail
+from django.conf import settings
 
 User = get_user_model()
 
@@ -208,4 +210,234 @@ class ChangePasswordView(APIView):
         )
 
         return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forgot Password — Step 1: Request OTP via email
+# ─────────────────────────────────────────────────────────────────────────────
+class ForgotPasswordRequestView(APIView):
+    """
+    POST /api/v1/auth/forgot-password/request/
+    Body: { "email": "user@example.com" }
+
+    Generates a 6-digit OTP valid for 10 minutes and sends it to the user's
+    registered email address via SMTP (or console in DEBUG mode).
+    Always returns HTTP 200 to avoid user-enumeration attacks.
+    """
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        if not email:
+            return Response(
+                {"error": "Email address is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Do NOT reveal that the email does not exist
+            return Response(
+                {"message": "If that email is registered, an OTP has been sent."},
+                status=status.HTTP_200_OK
+            )
+
+        # Generate OTP (invalidates any previously unused OTPs for this user)
+        otp_obj = PasswordResetOTP.generate_for(user)
+
+        subject = "SmartTravel — Your Password Reset OTP"
+        message = (
+            f"Hi {user.username},\n\n"
+            f"You requested a password reset for your SmartTravel account.\n\n"
+            f"Your One-Time Password (OTP) is:\n\n"
+            f"    {otp_obj.otp}\n\n"
+            f"This OTP is valid for {PasswordResetOTP.OTP_VALIDITY_MINUTES} minutes.\n"
+            f"If you did not request this, you can safely ignore this email.\n\n"
+            f"— The SmartTravel Team"
+        )
+
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception as exc:
+            import logging
+            logging.error(f"OTP email failed for {user.email}: {exc}")
+            # In production you'd return 500; in dev we still return 200 so
+            # the developer can check the console backend.
+
+        # Log activity
+        log_activity(
+            user=user,
+            action='PASSWORD_RESET_REQUESTED',
+            details=f"Password reset OTP dispatched to {user.email}.",
+            request=request
+        )
+
+        return Response(
+            {"message": "If that email is registered, an OTP has been sent."},
+            status=status.HTTP_200_OK
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forgot Password — Step 2: Verify OTP
+# ─────────────────────────────────────────────────────────────────────────────
+class ForgotPasswordVerifyOTPView(APIView):
+    """
+    POST /api/v1/auth/forgot-password/verify-otp/
+    Body: { "email": "user@example.com", "otp": "123456" }
+
+    Validates the OTP and returns a short-lived reset_token (the OTP id encoded
+    in the response) that the frontend must pass when submitting the new password.
+    """
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp_code = request.data.get('otp', '').strip()
+
+        if not email or not otp_code:
+            return Response(
+                {"error": "Email and OTP are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired OTP."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Find the most recent unused OTP for this user
+        otp_obj = (
+            PasswordResetOTP.objects
+            .filter(user=user, otp=otp_code, is_used=False)
+            .order_by('-created_at')
+            .first()
+        )
+
+        if otp_obj is None or not otp_obj.is_valid():
+            return Response(
+                {"error": "Invalid or expired OTP. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # We do NOT mark it used yet — that happens when the password is set.
+        # Return the OTP id as a reset_token so Step 3 can reference it.
+        return Response(
+            {
+                "message": "OTP verified. Proceed to set your new password.",
+                "reset_token": otp_obj.id,  # opaque id, frontend stores it temporarily
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forgot Password — Step 3: Set new password
+# ─────────────────────────────────────────────────────────────────────────────
+class ForgotPasswordResetView(APIView):
+    """
+    POST /api/v1/auth/forgot-password/reset/
+    Body: {
+        "email": "user@example.com",
+        "reset_token": <otp_id from Step 2>,
+        "new_password": "...",
+        "confirm_password": "..."
+    }
+
+    Completes the password reset, invalidates the OTP and sends a confirmation
+    email.
+    """
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        email          = request.data.get('email', '').strip().lower()
+        reset_token    = request.data.get('reset_token')
+        new_password   = request.data.get('new_password', '')
+        confirm_password = request.data.get('confirm_password', '')
+
+        if not all([email, reset_token, new_password, confirm_password]):
+            return Response(
+                {"error": "All fields are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_password != confirm_password:
+            return Response(
+                {"error": "Passwords do not match."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(new_password) < 8:
+            return Response(
+                {"error": "Password must be at least 8 characters long."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Invalid request."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            otp_obj = PasswordResetOTP.objects.get(id=reset_token, user=user, is_used=False)
+        except PasswordResetOTP.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired reset token. Please start over."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not otp_obj.is_valid():
+            return Response(
+                {"error": "Reset token has expired. Please request a new OTP."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Set new password and invalidate OTP
+        user.set_password(new_password)
+        user.save()
+        otp_obj.is_used = True
+        otp_obj.save()
+
+        # Confirmation email
+        try:
+            send_mail(
+                subject="SmartTravel — Password Changed Successfully",
+                message=(
+                    f"Hi {user.username},\n\n"
+                    f"Your SmartTravel account password has been changed successfully.\n\n"
+                    f"If you did not make this change, please contact support immediately.\n\n"
+                    f"— The SmartTravel Team"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+        # Log activity
+        log_activity(
+            user=user,
+            action='PASSWORD_RESET_COMPLETED',
+            details=f"Password reset completed for {user.email} via OTP flow.",
+            request=request
+        )
+
+        return Response(
+            {"message": "Password has been reset successfully. You can now log in with your new password."},
+            status=status.HTTP_200_OK
+        )
 
