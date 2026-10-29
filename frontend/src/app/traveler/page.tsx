@@ -24,6 +24,7 @@ interface Tour {
   markup_percentage: string;
   status: string;
   items?: any[];
+  ai_itinerary?: any;
 }
 
 export default function TravelerDashboardPage() {
@@ -490,6 +491,53 @@ export default function TravelerDashboardPage() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Custom AI Day-by-Day Itinerary If Stored */}
+                            {(() => {
+                              const itin = aiReports[t.id]?.ai_itinerary || t.ai_itinerary;
+                              if (!itin || !itin.daily_itinerary || itin.daily_itinerary.length === 0) return null;
+                              return (
+                                <div className="bg-[#0f1a24] border border-white/8 rounded-xl p-4 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                                      <Sparkles className="h-3.5 w-3.5" />
+                                      AI Day-by-Day Itinerary ({itin.days_count || itin.daily_itinerary.length} Days in {itin.destination || 'Destination'})
+                                    </p>
+                                    {itin.highlights?.food?.length > 0 && (
+                                      <span className="text-2xs text-slate-400">Must Try: {itin.highlights.food[0]}</span>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-2 pt-1">
+                                    {itin.daily_itinerary.map((d: any, idx: number) => (
+                                      <div key={idx} className="bg-black/20 border border-white/5 rounded-lg p-3 text-xs space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-extrabold text-white text-xs">Day {d.day_number}: {d.theme}</span>
+                                          <span className="text-2xs text-slate-500">{d.date}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-2xs text-slate-400">
+                                          <div className="bg-white/2 p-2 rounded border border-white/5">
+                                            <span className="font-bold text-amber-400 block mb-0.5">🌅 Morning</span>
+                                            <p className="font-semibold text-slate-200 truncate">{d.morning?.title}</p>
+                                            <p className="text-slate-500 text-3xs truncate">{d.morning?.location}</p>
+                                          </div>
+                                          <div className="bg-white/2 p-2 rounded border border-white/5">
+                                            <span className="font-bold text-sky-400 block mb-0.5">☀️ Afternoon</span>
+                                            <p className="font-semibold text-slate-200 truncate">{d.afternoon?.title}</p>
+                                            <p className="text-slate-500 text-3xs truncate">{d.afternoon?.location}</p>
+                                          </div>
+                                          <div className="bg-white/2 p-2 rounded border border-white/5">
+                                            <span className="font-bold text-violet-400 block mb-0.5">🌙 Evening</span>
+                                            <p className="font-semibold text-slate-200 truncate">{d.evening?.title}</p>
+                                            <p className="text-slate-500 text-3xs truncate">{d.evening?.location}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </>
                         ) : (
                           <div className="text-center py-6 text-slate-500 text-sm">

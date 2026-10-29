@@ -142,9 +142,37 @@ class TourViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy', 'submit']:
             permission_classes = [IsTraveler | IsAdminOrSuperAdmin]
+        elif self.action in ['generate_itinerary']:
+            permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
+
+    @action(detail=False, methods=['post'], url_path='generate-itinerary')
+    def generate_itinerary(self, request):
+        destination = request.data.get('destination', '').strip()
+        start_date = request.data.get('start_date', '')
+        end_date = request.data.get('end_date', '')
+        budget_tier = request.data.get('budget_tier', 'STANDARD')
+        travelers = request.data.get('travelers', 1)
+        notes = request.data.get('notes', '')
+        api_key = request.data.get('api_key', None)
+
+        if not destination:
+            return Response({"error": "Destination is required for AI itinerary planning."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from tours.ai_generator import AITourPlanner
+        planner = AITourPlanner()
+        plan = planner.generate_plan(
+            destination=destination,
+            start_date=start_date,
+            end_date=end_date,
+            budget_tier=budget_tier,
+            travelers=travelers,
+            notes=notes,
+            api_key=api_key
+        )
+        return Response(plan, status=status.HTTP_200_OK)
 
     def get_queryset(self):
         user = self.request.user
@@ -204,13 +232,25 @@ class TourViewSet(viewsets.ModelViewSet):
         tour = self.get_object()
         engine = AIEngine()
         
-        # Determine destination
-        destination = "Dhaka"
+        # Determine destination intelligently from hotel, flight, ride, package, or tour title
+        destination = ""
         hotel_item = tour.items.filter(hotel__isnull=False).first()
+        flight_item = tour.items.filter(flight__isnull=False).first()
+        ride_item = tour.items.filter(ride__isnull=False).first()
+
         if hotel_item and hotel_item.hotel:
             destination = hotel_item.hotel.location
+        elif flight_item and flight_item.flight:
+            destination = flight_item.flight.destination_city
+        elif ride_item and ride_item.ride:
+            destination = ride_item.ride.location
         elif tour.package:
             destination = tour.package.destination
+        elif "to " in tour.title.lower():
+            destination = tour.title.lower().split("to ", 1)[1].split("—")[0].split("-")[0].strip().title()
+            
+        if not destination:
+            destination = "Cox's Bazar"
             
         prob = engine.predict_approval_probability(tour)
         fut_cost = engine.predict_future_cost(tour)
@@ -222,5 +262,6 @@ class TourViewSet(viewsets.ModelViewSet):
             "approval_probability": prob,
             "future_cost_prediction": fut_cost,
             "cheaper_alternatives": alts,
-            "weather_recommendations": weather
+            "weather_recommendations": weather,
+            "ai_itinerary": tour.ai_itinerary
         }, status=status.HTTP_200_OK)

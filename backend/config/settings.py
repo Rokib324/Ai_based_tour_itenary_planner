@@ -29,8 +29,7 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-fallback-secret-key-chan
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
-import sys
-if 'test' in sys.argv or 'verify_e2e' in sys.argv:
+if DEBUG and 'testserver' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('testserver')
 
 

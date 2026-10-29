@@ -86,10 +86,30 @@ class TourSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'traveler', 'traveler_email', 'package', 'package_details',
             'title', 'budget_tier', 'status', 'start_date', 'end_date',
-            'base_cost', 'markup_percentage', 'final_price', 'items', 'new_items',
-            'created_at', 'updated_at'
+            'base_cost', 'markup_percentage', 'final_price', 'ai_itinerary',
+            'items', 'new_items', 'created_at', 'updated_at'
         )
         read_only_fields = ('traveler', 'base_cost', 'markup_percentage', 'final_price', 'status')
+
+    def validate(self, attrs):
+        start_date = attrs.get('start_date')
+        end_date = attrs.get('end_date')
+        from django.utils import timezone
+        today = timezone.localdate()
+
+        # On creation, start_date cannot be in the past
+        if self.instance is None:
+            if start_date and start_date < today:
+                raise serializers.ValidationError({"start_date": "Start date cannot be in the past."})
+
+        # End date cannot be earlier than start date
+        effective_start = start_date or (self.instance.start_date if self.instance else None)
+        effective_end = end_date or (self.instance.end_date if self.instance else None)
+
+        if effective_start and effective_end and effective_end < effective_start:
+            raise serializers.ValidationError({"end_date": "End date cannot be earlier than start date."})
+
+        return attrs
 
     def create(self, validated_data):
         new_items_data = validated_data.pop('new_items', None)

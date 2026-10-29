@@ -135,6 +135,9 @@ class Tour(models.Model):
     base_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     markup_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=25.00)
     final_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # AI Generated Itinerary and Recommendations
+    ai_itinerary = models.JSONField(null=True, blank=True, default=dict)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
