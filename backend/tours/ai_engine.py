@@ -2,7 +2,6 @@ import os
 import json
 import logging
 import requests
-import joblib
 from datetime import date
 from django.conf import settings
 from decimal import Decimal
@@ -24,24 +23,7 @@ class AIEngine:
     _gemini_disabled = False
 
     def __init__(self):
-        self.model_dir = os.path.join(settings.BASE_DIR, 'tours', 'ml_models')
-        
-        # Load local Scikit-Learn models
-        try:
-            self.approval_model = joblib.load(os.path.join(self.model_dir, 'approval_model.joblib'))
-            self.approval_scaler = joblib.load(os.path.join(self.model_dir, 'approval_scaler.joblib'))
-        except Exception as e:
-            logger.debug(f"Approval model load bypassed: {e}")
-            self.approval_model = None
-            self.approval_scaler = None
-            
-        try:
-            self.cost_model = joblib.load(os.path.join(self.model_dir, 'cost_model.joblib'))
-            self.cost_scaler = joblib.load(os.path.join(self.model_dir, 'cost_scaler.joblib'))
-        except Exception as e:
-            logger.debug(f"Cost model load bypassed: {e}")
-            self.cost_model = None
-            self.cost_scaler = None
+        pass
 
     def _call_gemini(self, prompt):
         """
@@ -92,116 +74,6 @@ class AIEngine:
             return None
 
         return None
-
-    def get_destination_recommendations(self, user_profile):
-        """
-        Recommends TourPackages matching the user's travel preferences.
-        Uses Gemini API when available, with a fast, intelligent local heuristic fallback.
-        """
-        packages = TourPackage.objects.filter(is_active=True)
-        if not packages.exists():
-            return []
-
-        pref_tier = user_profile.preferred_budget_tier or "STANDARD"
-        pref_style = (user_profile.preferred_travel_style or "").strip().lower()
-        pref_food = (user_profile.preferred_food or "").strip().lower()
-
-        # Try Gemini API if not disabled
-        if not AIEngine._gemini_disabled:
-            api_key = getattr(settings, 'GEMINI_API_KEY', '')
-            if api_key:
-                packages_list = []
-                for p in packages:
-                    packages_list.append({
-                        'id': p.id,
-                        'title': p.title,
-                        'destination': p.destination,
-                        'budget_tier': p.budget_tier,
-                        'base_price': float(p.base_price),
-                        'description': p.description
-                    })
-
-                prompt = (
-                    "You are an AI travel recommender. Review the traveler's profile:\n"
-                    f"- Preferred Budget Tier: {pref_tier}\n"
-                    f"- Travel Style: {pref_style or 'Any'}\n"
-                    f"- Food Preference: {pref_food or 'Any'}\n\n"
-                    f"Rate the following packages from 70.0 to 98.0 based on how well they fit these preferences:\n"
-                    f"{json.dumps(packages_list)}\n\n"
-                    "Return a JSON array of objects. Each object must contain these exact keys:\n"
-                    "- 'package_id' (integer, matching the package id)\n"
-                    "- 'title' (string)\n"
-                    "- 'description' (string)\n"
-                    "- 'destination' (string)\n"
-                    "- 'budget_tier' (string)\n"
-                    "- 'base_price' (float)\n"
-                    "- 'score' (float, rating from 70.0 to 98.0)\n\n"
-                    "Sort the array by score descending. Return at most 8 items."
-                )
-
-                gemini_res = self._call_gemini(prompt)
-                if gemini_res and isinstance(gemini_res, list):
-                    formatted = []
-                    for item in gemini_res[:8]:
-                        formatted.append({
-                            'package_id': item.get('package_id'),
-                            'title': item.get('title'),
-                            'description': item.get('description'),
-                            'destination': item.get('destination'),
-                            'budget_tier': item.get('budget_tier'),
-                            'base_price': Decimal(str(item.get('base_price', 0.00))),
-                            'score': round(float(item.get('score', 85.0)), 1)
-                        })
-                    if formatted:
-                        return formatted
-
-        # Intelligent Local AI Recommendation Engine
-        tier_weight_map = {
-            'BUDGET': {'BUDGET': 20, 'STANDARD': 10, 'LUXURY': 5},
-            'STANDARD': {'STANDARD': 20, 'BUDGET': 12, 'LUXURY': 12},
-            'LUXURY': {'LUXURY': 20, 'STANDARD': 12, 'BUDGET': 5},
-        }
-
-        weights = tier_weight_map.get(pref_tier, {'STANDARD': 15, 'BUDGET': 10, 'LUXURY': 10})
-        recommended = []
-
-        for idx, pkg in enumerate(packages):
-            # Base affinity score between 74 and 80
-            score = 74.0 + (pkg.id % 5) * 1.2
-
-            # Budget tier alignment
-            score += weights.get(pkg.budget_tier, 8)
-
-            desc_lower = (pkg.description + " " + pkg.title + " " + pkg.destination).lower()
-
-            # Travel style affinity
-            if pref_style and pref_style in desc_lower:
-                score += 8.0
-
-            # Food preference affinity
-            if pref_food and pref_food in desc_lower:
-                score += 5.0
-
-            # Specific high-demand destination bonus
-            if any(hot in pkg.destination.lower() for hot in ["cox's bazar", 'sylhet', 'london', 'dubai', 'paris', 'tokyo']):
-                score += 3.5
-
-            # Normalize score within realistic high confidence range (75% to 98%)
-            final_score = min(98.0, max(75.0, round(score, 1)))
-
-            recommended.append({
-                'package_id': pkg.id,
-                'title': pkg.title,
-                'description': pkg.description,
-                'destination': pkg.destination,
-                'budget_tier': pkg.budget_tier,
-                'base_price': pkg.base_price,
-                'score': final_score
-            })
-
-        # Sort by match score descending
-        recommended = sorted(recommended, key=lambda x: x['score'], reverse=True)
-        return recommended[:8]
 
     def get_cheaper_alternatives(self, tour):
         """
@@ -396,36 +268,7 @@ class AIEngine:
                 if gemini_res and isinstance(gemini_res, dict) and 'approval_probability' in gemini_res:
                     return round(float(gemini_res['approval_probability']), 1)
 
-        # Local Scikit-Learn Logistic Regression Model
-        if self.approval_model and self.approval_scaler:
-            tier_map = {'BUDGET': 0, 'STANDARD': 1, 'LUXURY': 2, 'CUSTOM': 1}
-            budget_tier_code = tier_map.get(tour.budget_tier, 1)
-            
-            has_flight = 1 if tour.items.filter(flight__isnull=False).exists() else 0
-            has_hotel = 1 if tour.items.filter(hotel__isnull=False).exists() else 0
-            has_restaurant = 1 if tour.items.filter(restaurant__isnull=False).exists() else 0
-            has_ride = 1 if tour.items.filter(ride__isnull=False).exists() else 0
-            
-            try:
-                import pandas as pd
-                features = pd.DataFrame([{
-                    'total_cost': total_cost,
-                    'budget_tier_code': budget_tier_code,
-                    'has_flight': has_flight,
-                    'has_hotel': has_hotel,
-                    'has_restaurant': has_restaurant,
-                    'has_ride': has_ride,
-                    'user_approval_rate': user_approval_rate
-                }])
-                features_scaled = self.approval_scaler.transform(features)
-                prob = self.approval_model.predict_proba(features_scaled)[0][1]
-                # Scale between 75% and 98%
-                scaled_prob = 75.0 + (prob * 23.0)
-                return round(float(scaled_prob), 1)
-            except Exception:
-                pass
-
-        # High confidence baseline heuristic
+        # Baseline heuristic calculation
         base_prob = 88.0
         if tour.budget_tier == 'LUXURY':
             base_prob += 5.0
@@ -464,27 +307,7 @@ class AIEngine:
                 if gemini_res and isinstance(gemini_res, dict) and 'future_cost_prediction' in gemini_res:
                     return round(float(gemini_res['future_cost_prediction']), 2)
 
-        # Local Scikit-Learn Linear Regression model
-        if self.cost_model and self.cost_scaler:
-            month = tour.start_date.month if tour.start_date else 1
-            tier_map = {'BUDGET': 0, 'STANDARD': 1, 'LUXURY': 2, 'CUSTOM': 1}
-            budget_tier_code = tier_map.get(tour.budget_tier, 1)
-            
-            try:
-                import pandas as pd
-                features = pd.DataFrame([{
-                    'base_cost': base_cost,
-                    'days_ahead': days_ahead,
-                    'month': month,
-                    'budget_tier_code': budget_tier_code
-                }])
-                features_scaled = self.cost_scaler.transform(features)
-                pred = self.cost_model.predict(features_scaled)[0]
-                return round(float(max(base_cost * 1.02, pred)), 2)
-            except Exception:
-                pass
-
-        # Regression fallback equation: 5% annual inflation + 8% seasonal variance
+        # Seasonal variance and inflation calculation
         month = tour.start_date.month if tour.start_date else 1
         seasonal_factor = 1.05 + 0.04 * (month in [6, 7, 8, 12])
         lead_time_factor = 1.0 + (days_ahead / 365.0) * 0.05

@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C extensions
+.Python
+
+# Virtual Environments
+.env/
+env/
+venv/
+ENV/
+backend/env/
+
+# Environment Variables
+.env
+.env.*
+backend/.env
+!backend/.env.example
+
+# Database
+*.sqlite3
+backend/db.sqlite3
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

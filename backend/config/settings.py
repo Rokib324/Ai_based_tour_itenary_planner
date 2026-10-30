@@ -226,5 +226,6 @@ if 'test' in sys.argv or 'verify_e2e' in sys.argv:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
-# Google Gemini API key configuration
-GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+# Groq Cloud AI Configuration
+GROQ_API_KEY = env('GROQ_API_KEY', default='')
+GROQ_MODEL = env('GROQ_MODEL', default='llama-3.3-70b-versatile')
