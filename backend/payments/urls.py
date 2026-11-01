@@ -4,7 +4,8 @@ from payments.views import (
     CreateCheckoutSessionView,
     StripeWebhookView,
     MockPaymentView,
-    PaymentHistoryListView
+    PaymentHistoryListView,
+    RefundHistoryListView
 )
 
 urlpatterns = [
@@ -12,6 +13,7 @@ urlpatterns = [
     path('stripe-webhook/', StripeWebhookView.as_view(), name='payment_stripe_webhook'),
     path('mock-pay/', MockPaymentView.as_view(), name='payment_mock_pay'),
     path('history/', PaymentHistoryListView.as_view(), name='payment_history'),
+    path('refunds/', RefundHistoryListView.as_view(), name='refund_history'),
     
     # Success/Cancel templates placeholders
     path('success/', TemplateView.as_view(template_name='payments/success.html'), name='payment_success'),

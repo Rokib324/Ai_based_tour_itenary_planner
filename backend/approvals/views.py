@@ -76,17 +76,25 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             return Response({"error": "Invalid status. Must be APPROVED or REJECTED."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 1. Admin Verification
+        service_type = None
+        service_display = None
+        rejected_item = None
+
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             if workflow.admin_status != ApprovalStatus.PENDING:
                 return Response({"error": "Admin checkpoint has already been processed."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.admin_status = target_status
             workflow.admin_remarks = comments
+            service_display = "Administrative Checkpoint"
             
         # 2. Flight Verification
         elif user.role == User.Roles.FLIGHT_MANAGER:
             if workflow.flight_status != ApprovalStatus.PENDING:
                 return Response({"error": "Flight checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.flight_status = target_status
+            service_type = 'FLIGHT'
+            service_display = 'Flight Service'
+            rejected_item = workflow.tour.items.filter(flight__isnull=False).first()
             
             ManagerApproval.objects.create(
                 workflow=workflow,
@@ -101,6 +109,9 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             if workflow.hotel_status != ApprovalStatus.PENDING:
                 return Response({"error": "Hotel checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.hotel_status = target_status
+            service_type = 'HOTEL'
+            service_display = 'Hotel Service'
+            rejected_item = workflow.tour.items.filter(hotel__isnull=False).first()
             
             ManagerApproval.objects.create(
                 workflow=workflow,
@@ -115,6 +126,9 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             if workflow.restaurant_status != ApprovalStatus.PENDING:
                 return Response({"error": "Restaurant checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.restaurant_status = target_status
+            service_type = 'RESTAURANT'
+            service_display = 'Dining Service'
+            rejected_item = workflow.tour.items.filter(restaurant__isnull=False).first()
             
             ManagerApproval.objects.create(
                 workflow=workflow,
@@ -129,6 +143,9 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
             if workflow.ride_status != ApprovalStatus.PENDING:
                 return Response({"error": "Ride checkpoint has already been processed or skipped."}, status=status.HTTP_400_BAD_REQUEST)
             workflow.ride_status = target_status
+            service_type = 'RIDE'
+            service_display = 'Ride / Transport Service'
+            rejected_item = workflow.tour.items.filter(ride__isnull=False).first()
             
             ManagerApproval.objects.create(
                 workflow=workflow,
@@ -140,16 +157,83 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
         else:
             return Response({"detail": "Permission denied. Travelers cannot review tours."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Trigger decision engine to transition final tour state
+        # Handle Service Rejection & Automatic Refund if tour was already paid
+        refund_record = None
+        refund_amount = 0.0
+        if target_status == ApprovalStatus.REJECTED and service_type:
+            from payments.models import Payment, Refund
+            paid_payments = workflow.tour.payments.filter(status=Payment.Statuses.SUCCESSFUL)
+            if paid_payments.exists() and rejected_item:
+                cost = 0.0
+                if rejected_item.flight:
+                    cost = float(rejected_item.flight.price)
+                elif rejected_item.hotel:
+                    cost = float(rejected_item.hotel.price_per_night * rejected_item.quantity)
+                elif rejected_item.restaurant:
+                    cost = float(rejected_item.restaurant.price_per_meal * rejected_item.quantity)
+                elif rejected_item.ride:
+                    cost = float(rejected_item.ride.price_per_km * rejected_item.quantity)
+                elif rejected_item.is_custom_provided:
+                    cost = float(rejected_item.custom_cost)
+
+                markup = float(workflow.tour.markup_percentage or 25.0)
+                refund_amount = round(cost * (1.0 + markup / 100.0), 2)
+                last_payment = paid_payments.order_by('-created_at').first()
+
+                if refund_amount > 0:
+                    item_name = "Service"
+                    if rejected_item.flight:
+                        item_name = f"Flight: {rejected_item.flight.name}"
+                    elif rejected_item.hotel:
+                        item_name = f"Hotel: {rejected_item.hotel.name}"
+                    elif rejected_item.restaurant:
+                        item_name = f"Restaurant: {rejected_item.restaurant.name}"
+                    elif rejected_item.ride:
+                        item_name = f"Ride: {rejected_item.ride.vehicle_type}"
+
+                    refund_record = Refund.objects.create(
+                        tour=workflow.tour,
+                        traveler=workflow.tour.traveler,
+                        payment=last_payment,
+                        service_type=service_type,
+                        service_name=item_name,
+                        amount=refund_amount,
+                        reason=comments or 'Provider declined service request',
+                        status=Refund.Statuses.COMPLETED
+                    )
+
+        # Trigger decision engine to transition tour state
         workflow.run_decision_engine()
         
-        # Notify the traveler
-        notify_user(
-            user=workflow.tour.traveler,
-            title="Tour Checkpoint Update",
-            subject=f"Tour Checkpoint Update: {target_status}",
-            message=f"A checkpoint on your tour '{workflow.tour.title}' was updated to: {target_status} by a system reviewer. Comments: {comments}"
-        )
+        # Notify the traveler with context-rich feedback
+        if target_status == ApprovalStatus.REJECTED and service_type:
+            if refund_record:
+                notice = (
+                    f"The {service_display} for your tour '{workflow.tour.title}' was declined by the provider. "
+                    f"Reason: {comments or 'Service unavailable'}. "
+                    f"Your tour is still active! A refund of ${refund_amount:.2f} has been processed back to your payment method. "
+                    f"You can now choose a custom or alternative provider in your dashboard."
+                )
+            else:
+                notice = (
+                    f"The {service_display} for your tour '{workflow.tour.title}' was declined by the provider. "
+                    f"Reason: {comments or 'Service unavailable'}. "
+                    f"Your tour is still active and visible to other providers! "
+                    f"You can choose an alternative or custom provider in your dashboard, and your price will adjust automatically."
+                )
+            notify_user(
+                user=workflow.tour.traveler,
+                title=f"{service_display} Declined — Tour Still Active",
+                subject=f"Service Update: {service_display} Declined",
+                message=notice
+            )
+        else:
+            notify_user(
+                user=workflow.tour.traveler,
+                title="Tour Checkpoint Update",
+                subject=f"Tour Checkpoint Update: {target_status}",
+                message=f"A checkpoint on your tour '{workflow.tour.title}' was updated to: {target_status} by a system reviewer. Comments: {comments}"
+            )
         
         # Log Activity
         log_activity(

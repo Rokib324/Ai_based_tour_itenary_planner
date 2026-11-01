@@ -19,9 +19,6 @@ def notify_user(user, title, subject, message):
         # 2. Trigger asynchronous email task in Celery
         send_email_task.delay(user.id, subject, message)
     except Exception:
-        # If Celery/Redis is down, fallback to synchronous execution to prevent crash
-        try:
-            send_email_task(user.id, subject, message)
-        except Exception as e:
-            import logging
-            logging.error(f"Failed to send email notification: {e}")
+        # If Celery/Redis is down, log and avoid blocking HTTP requests with synchronous network socket timeouts
+        import logging
+        logging.getLogger(__name__).info(f"Celery unavailable; in-app notification recorded for user {user.id}.")

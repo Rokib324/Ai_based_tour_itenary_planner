@@ -59,15 +59,20 @@ class TourItemSerializer(serializers.ModelSerializer):
         model = TourItem
         fields = (
             'id', 'flight', 'hotel', 'restaurant', 'ride', 
-            'quantity', 'flight_details', 'hotel_details', 
-            'restaurant_details', 'ride_details'
+            'quantity', 'is_custom_provided', 'custom_service_type',
+            'custom_provider_name', 'custom_details', 'custom_cost',
+            'flight_details', 'hotel_details', 'restaurant_details', 'ride_details'
         )
 
 
 class TourItemCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TourItem
-        fields = ('flight', 'hotel', 'restaurant', 'ride', 'quantity')
+        fields = (
+            'flight', 'hotel', 'restaurant', 'ride', 'quantity',
+            'is_custom_provided', 'custom_service_type', 'custom_provider_name',
+            'custom_details', 'custom_cost'
+        )
 
 
 # Main Tour Serializer
@@ -80,6 +85,8 @@ class TourSerializer(serializers.ModelSerializer):
     )
     traveler_email = serializers.EmailField(source='traveler.email', read_only=True)
     package_details = TourPackageSerializer(source='package', read_only=True)
+    approval_workflow = serializers.SerializerMethodField()
+    refunds = serializers.SerializerMethodField()
 
     class Meta:
         model = Tour
@@ -87,9 +94,43 @@ class TourSerializer(serializers.ModelSerializer):
             'id', 'traveler', 'traveler_email', 'package', 'package_details',
             'title', 'budget_tier', 'status', 'start_date', 'end_date',
             'base_cost', 'markup_percentage', 'final_price', 'ai_itinerary',
-            'items', 'new_items', 'created_at', 'updated_at'
+            'items', 'new_items', 'approval_workflow', 'refunds', 'created_at', 'updated_at'
         )
         read_only_fields = ('traveler', 'base_cost', 'markup_percentage', 'final_price', 'status')
+
+    def get_approval_workflow(self, obj):
+        wf = getattr(obj, 'approval_workflow', None)
+        if not wf:
+            return None
+        remarks_map = {}
+        for log in wf.manager_logs.order_by('-actioned_at'):
+            if log.service_type not in remarks_map and log.comments:
+                remarks_map[log.service_type] = log.comments
+        return {
+            'id': wf.id,
+            'admin_status': wf.admin_status,
+            'flight_status': wf.flight_status,
+            'hotel_status': wf.hotel_status,
+            'restaurant_status': wf.restaurant_status,
+            'ride_status': wf.ride_status,
+            'decision_engine_status': wf.decision_engine_status,
+            'admin_remarks': wf.admin_remarks,
+            'service_remarks': remarks_map
+        }
+
+    def get_refunds(self, obj):
+        return [
+            {
+                'id': r.id,
+                'service_type': r.service_type,
+                'service_name': r.service_name,
+                'amount': float(r.amount),
+                'reason': r.reason,
+                'status': r.status,
+                'created_at': r.created_at
+            }
+            for r in obj.refunds.all()
+        ]
 
     def validate(self, attrs):
         start_date = attrs.get('start_date')

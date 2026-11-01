@@ -7,8 +7,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from tours.models import Tour
-from payments.models import Payment
-from payments.serializers import PaymentSerializer
+from payments.models import Payment, Refund
+from payments.serializers import PaymentSerializer, RefundSerializer
 from users.models import User
 
 # Configure Stripe key
@@ -197,3 +197,14 @@ class PaymentHistoryListView(generics.ListAPIView):
             return Payment.objects.all()
         # Travelers see their own payments history
         return Payment.objects.filter(traveler=user)
+
+
+class RefundHistoryListView(generics.ListAPIView):
+    serializer_class = RefundSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
+            return Refund.objects.all()
+        return Refund.objects.filter(traveler=user)

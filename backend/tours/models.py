@@ -153,11 +153,12 @@ class Tour(models.Model):
             self.base_cost = self.package.base_price
         else:
             # Aggregate items
-            flight_sum = sum(item.flight.price for item in self.items.all() if item.flight)
-            hotel_sum = sum(item.hotel.price_per_night * item.quantity for item in self.items.all() if item.hotel)
-            restaurant_sum = sum(item.restaurant.price_per_meal * item.quantity for item in self.items.all() if item.restaurant)
-            ride_sum = sum(item.ride.price_per_km * item.quantity for item in self.items.all() if item.ride)
-            self.base_cost = flight_sum + hotel_sum + restaurant_sum + ride_sum
+            flight_sum = sum(item.flight.price for item in self.items.all() if item.flight and not item.is_custom_provided)
+            hotel_sum = sum(item.hotel.price_per_night * item.quantity for item in self.items.all() if item.hotel and not item.is_custom_provided)
+            restaurant_sum = sum(item.restaurant.price_per_meal * item.quantity for item in self.items.all() if item.restaurant and not item.is_custom_provided)
+            ride_sum = sum(item.ride.price_per_km * item.quantity for item in self.items.all() if item.ride and not item.is_custom_provided)
+            custom_sum = sum(item.custom_cost for item in self.items.all() if item.is_custom_provided)
+            self.base_cost = flight_sum + hotel_sum + restaurant_sum + ride_sum + custom_sum
 
         from decimal import Decimal
         if self.budget_tier == BudgetTier.BUDGET:
@@ -188,11 +189,21 @@ class TourItem(models.Model):
     ride = models.ForeignKey(RideService, on_delete=models.SET_NULL, null=True, blank=True)
     
     quantity = models.IntegerField(default=1)  # represents nights for hotels, meals for restaurant, km for rides
+    
+    # Custom provider details if traveler replaces a rejected service
+    is_custom_provided = models.BooleanField(default=False)
+    custom_service_type = models.CharField(max_length=20, blank=True, null=True)  # 'FLIGHT', 'HOTEL', 'RESTAURANT', 'RIDE'
+    custom_provider_name = models.CharField(max_length=150, blank=True, null=True)
+    custom_details = models.TextField(blank=True, null=True)
+    custom_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         item_type = "Empty Item"
-        if self.flight:
+        if self.is_custom_provided:
+            item_type = f"Custom {self.custom_service_type or 'Service'}: {self.custom_provider_name} (${self.custom_cost})"
+        elif self.flight:
             item_type = f"Flight: {self.flight.flight_number}"
         elif self.hotel:
             item_type = f"Hotel: {self.hotel.name}"

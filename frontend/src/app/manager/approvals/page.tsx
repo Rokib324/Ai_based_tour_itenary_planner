@@ -465,8 +465,8 @@ export default function ApprovalWorkspacePage() {
                         </p>
                         <p className="text-2xs text-slate-400">
                           {showConfirm === 'APPROVED'
-                            ? 'This will approve your checkpoint. If all managers approve, the tour will be LOCKED for payment.'
-                            : 'This will reject the tour. The traveler will be notified and must submit a new plan.'}
+                            ? 'This will approve your checkpoint. If all managers approve, the tour will transition to LOCKED for payment.'
+                            : 'This will decline to provide your service. The tour will remain active and visible for other managers, and the traveler will be notified to choose an alternative/custom provider or receive a refund.'}
                         </p>
                         <div className="flex gap-3">
                           <button

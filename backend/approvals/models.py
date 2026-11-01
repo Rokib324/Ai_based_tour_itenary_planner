@@ -31,10 +31,13 @@ class TourApproval(models.Model):
     def run_decision_engine(self):
         """
         Decision Engine Logic:
-        If all active service checkpoints (Flight, Hotel, Restaurant, Ride) are approved/skipped
-        and admin has not rejected -> Final status = APPROVED, Tour status = LOCKED (awaiting payment).
-        If any checkpoint is rejected -> Final status = REJECTED, Tour status = REJECTED.
-        Otherwise, remain PENDING.
+        1. If admin rejects -> Tour status = REJECTED (Admin global veto).
+        2. If all active service checkpoints (Flight, Hotel, Restaurant, Ride) are approved/skipped
+           and admin has not rejected -> Tour status = LOCKED (ready for payment).
+        3. If an individual service provider rejects:
+           - The tour itself is NOT rejected!
+           - Tour remains active (PENDING) so other managers can review their checkpoints,
+             and the traveler can choose a custom/alternative provider or receive a refund.
         """
         service_statuses = [
             self.flight_status,
@@ -42,34 +45,39 @@ class TourApproval(models.Model):
             self.restaurant_status,
             self.ride_status
         ]
-        all_statuses = [self.admin_status] + service_statuses
 
-        if ApprovalStatus.REJECTED in all_statuses:
+        # 1. Admin explicit rejection
+        if self.admin_status == ApprovalStatus.REJECTED:
             self.decision_engine_status = ApprovalStatus.REJECTED
             self.tour.status = Tour.Status.REJECTED
             
             from notifications.utils import notify_user
             notify_user(
                 user=self.tour.traveler,
-                title="Tour Plan Rejected",
+                title="Tour Plan Rejected by Admin",
                 subject="Tour Plan Update: Rejected",
-                message=f"We regret to inform you that your tour plan '{self.tour.title}' was rejected during approval review."
+                message=f"Your tour plan '{self.tour.title}' was rejected during administrative review. Remarks: {self.admin_remarks or 'No remarks provided.'}"
             )
+        # 2. All active services approved or skipped
         elif all(s in [ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED] for s in service_statuses):
             self.admin_status = ApprovalStatus.APPROVED
             self.decision_engine_status = ApprovalStatus.APPROVED
-            self.tour.status = Tour.Status.LOCKED  # Transition tour to Locked state, awaiting payment
+            if self.tour.status == Tour.Status.PENDING:
+                self.tour.status = Tour.Status.LOCKED  # Transition tour to Locked state, awaiting payment
             
             from notifications.utils import notify_user
             notify_user(
                 user=self.tour.traveler,
                 title="Tour Approved - Payment Required",
                 subject="Tour Plan Update: Approved & Locked",
-                message=f"Congratulations! Your tour '{self.tour.title}' has been approved by all service managers. Please submit payment to unlock your itinerary."
+                message=f"Congratulations! All services on your tour '{self.tour.title}' have been approved. Please submit payment to unlock your itinerary."
             )
+        # 3. Ongoing or partially rejected service - tour remains active
         else:
             self.decision_engine_status = ApprovalStatus.PENDING
-            self.tour.status = Tour.Status.PENDING
+            if self.tour.status == Tour.Status.REJECTED:
+                # Recover tour if it was previously marked rejected by an individual service provider
+                self.tour.status = Tour.Status.PENDING
 
         self.tour.save()
         self.save()

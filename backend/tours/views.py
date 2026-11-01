@@ -387,7 +387,7 @@ class TourViewSet(viewsets.ModelViewSet):
     serializer_class = TourSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy', 'submit']:
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'submit', 'resolve_service']:
             permission_classes = [IsTraveler | IsAdminOrSuperAdmin]
         else:
             permission_classes = [permissions.IsAuthenticated]
@@ -408,6 +408,115 @@ class TourViewSet(viewsets.ModelViewSet):
         elif user.role == 'RIDE_MANAGER':
             return Tour.objects.filter(items__ride__isnull=False).distinct()
         return Tour.objects.none()
+
+    @action(detail=True, methods=['post'], url_path='resolve-service')
+    def resolve_service(self, request, pk=None):
+        tour = self.get_object()
+        if tour.traveler != request.user and request.user.role not in ['ADMIN', 'SUPER_ADMIN']:
+            return Response({"detail": "You do not have permission to modify this tour."}, status=status.HTTP_403_FORBIDDEN)
+
+        service_type = request.data.get('service_type', '').strip().lower()
+        action_type = request.data.get('action_type', '').strip().lower()  # 'catalog', 'custom', 'skip'
+        catalog_id = request.data.get('catalog_id')
+        custom_name = request.data.get('custom_provider_name', '').strip()
+        custom_details = request.data.get('custom_details', '').strip()
+        custom_cost = request.data.get('custom_cost', 0.0)
+
+        if service_type not in ['flight', 'hotel', 'restaurant', 'ride']:
+            return Response({"error": "Invalid service_type. Must be flight, hotel, restaurant, or ride."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action_type not in ['catalog', 'custom', 'skip']:
+            return Response({"error": "Invalid action_type. Must be catalog, custom, or skip."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from approvals.models import TourApproval, ApprovalStatus
+        approval, _ = TourApproval.objects.get_or_create(tour=tour)
+
+        # Find existing item matching service_type
+        item = None
+        for it in tour.items.all():
+            if getattr(it, service_type, None) is not None or (it.is_custom_provided and (it.custom_service_type or '').lower() == service_type):
+                item = it
+                break
+
+        if action_type == 'skip':
+            if item:
+                item.delete()
+            setattr(approval, f"{service_type}_status", ApprovalStatus.SKIPPED)
+        elif action_type == 'catalog':
+            if not catalog_id:
+                return Response({"error": "catalog_id is required for catalog replacement."}, status=status.HTTP_400_BAD_REQUEST)
+            if not item:
+                item = TourItem(tour=tour)
+            item.is_custom_provided = False
+            item.custom_provider_name = None
+            item.custom_details = None
+            item.custom_cost = 0.00
+            item.flight = None
+            item.hotel = None
+            item.restaurant = None
+            item.ride = None
+
+            if service_type == 'flight':
+                try:
+                    item.flight = FlightService.objects.get(id=catalog_id)
+                except FlightService.DoesNotExist:
+                    return Response({"error": "Selected flight not found."}, status=status.HTTP_404_NOT_FOUND)
+            elif service_type == 'hotel':
+                try:
+                    item.hotel = HotelService.objects.get(id=catalog_id)
+                except HotelService.DoesNotExist:
+                    return Response({"error": "Selected hotel not found."}, status=status.HTTP_404_NOT_FOUND)
+            elif service_type == 'restaurant':
+                try:
+                    item.restaurant = RestaurantService.objects.get(id=catalog_id)
+                except RestaurantService.DoesNotExist:
+                    return Response({"error": "Selected restaurant not found."}, status=status.HTTP_404_NOT_FOUND)
+            elif service_type == 'ride':
+                try:
+                    item.ride = RideService.objects.get(id=catalog_id)
+                except RideService.DoesNotExist:
+                    return Response({"error": "Selected ride not found."}, status=status.HTTP_404_NOT_FOUND)
+            item.save()
+            setattr(approval, f"{service_type}_status", ApprovalStatus.APPROVED)
+        elif action_type == 'custom':
+            if not item:
+                item = TourItem(tour=tour)
+            item.flight = None
+            item.hotel = None
+            item.restaurant = None
+            item.ride = None
+            item.is_custom_provided = True
+            item.custom_service_type = service_type.upper()
+            item.custom_provider_name = custom_name or f"Custom {service_type.capitalize()} Provider"
+            item.custom_details = custom_details
+            from decimal import Decimal
+            try:
+                item.custom_cost = Decimal(str(custom_cost or 0.00))
+            except Exception:
+                item.custom_cost = Decimal('0.00')
+            item.save()
+            setattr(approval, f"{service_type}_status", ApprovalStatus.APPROVED)
+
+        # Recalculate financial breakdown
+        tour.calculate_prices()
+        tour.save()
+
+        # Update approval workflow and trigger decision engine
+        approval.save()
+        approval.run_decision_engine()
+
+        from notifications.utils import notify_user
+        notify_user(
+            user=tour.traveler,
+            title="Service Replacement Confirmed",
+            subject=f"Custom {service_type.capitalize()} Updated",
+            message=f"You have successfully configured a {action_type} option for {service_type.capitalize()} on '{tour.title}'."
+        )
+
+        return Response({
+            "message": f"Successfully resolved {service_type} via {action_type}.",
+            "tour": TourSerializer(tour).data
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='submit')
     def submit(self, request, pk=None):

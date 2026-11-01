@@ -1,3 +1,4 @@
+from django.db import models
 from django.db.models import Sum, Count
 from rest_framework import permissions, status
 from rest_framework.views import APIView
@@ -5,7 +6,7 @@ from rest_framework.response import Response
 from users.models import User
 from tours.models import Tour, TourItem, FlightService, HotelService, RestaurantService, RideService
 from payments.models import Payment
-from approvals.models import TourApproval, ApprovalStatus
+from approvals.models import TourApproval, ManagerApproval, ApprovalStatus
 from notifications.models import InAppNotification
 from analytics.models import ActivityLog
 from tours.ai_engine import AIEngine
@@ -119,27 +120,190 @@ class ManagerDashboardView(APIView):
         if user.role not in manager_roles and user.role not in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
             
-        # Count pending queue items for approvals
-        queue_count = 0
-        workflows = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED])
-        
-        if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            queue_count = workflows.filter(admin_status=ApprovalStatus.PENDING).count()
-            inventory_items = []
-        elif user.role == User.Roles.FLIGHT_MANAGER:
-            queue_count = workflows.filter(flight_status=ApprovalStatus.PENDING).count()
+        # Determine service domain field and service type
+        if user.role == User.Roles.FLIGHT_MANAGER:
+            status_field = 'flight_status'
+            service_type = ManagerApproval.ServiceTypes.FLIGHT
             inventory_items = FlightService.objects.filter(manager=user)
         elif user.role == User.Roles.HOTEL_MANAGER:
-            queue_count = workflows.filter(hotel_status=ApprovalStatus.PENDING).count()
+            status_field = 'hotel_status'
+            service_type = ManagerApproval.ServiceTypes.HOTEL
             inventory_items = HotelService.objects.filter(manager=user)
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            queue_count = workflows.filter(restaurant_status=ApprovalStatus.PENDING).count()
+            status_field = 'restaurant_status'
+            service_type = ManagerApproval.ServiceTypes.RESTAURANT
             inventory_items = RestaurantService.objects.filter(manager=user)
         elif user.role == User.Roles.RIDE_MANAGER:
-            queue_count = workflows.filter(ride_status=ApprovalStatus.PENDING).count()
+            status_field = 'ride_status'
+            service_type = ManagerApproval.ServiceTypes.RIDE
             inventory_items = RideService.objects.filter(manager=user)
-        else:
+        else: # Admin / SuperAdmin
+            status_field = 'admin_status'
+            service_type = None
             inventory_items = []
+
+        workflows = TourApproval.objects.all()
+        active_workflows = workflows.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED])
+        
+        # 1. KPI Counts
+        queue_count = active_workflows.filter(**{status_field: ApprovalStatus.PENDING}).count()
+        approved_workflows = workflows.filter(**{status_field: ApprovalStatus.APPROVED})
+        rejected_workflows = workflows.filter(**{status_field: ApprovalStatus.REJECTED})
+        
+        total_approved = approved_workflows.count()
+        total_rejected = rejected_workflows.count()
+        total_decisions = total_approved + total_rejected
+        approval_rate = round((total_approved / total_decisions) * 100.0, 1) if total_decisions > 0 else 100.0
+
+        # Helper to extract service details and income for this manager's role
+        def get_tour_service_info(tour, role):
+            item_title = "Service"
+            item_desc = "Standard"
+            income = 0.0
+
+            if role == User.Roles.FLIGHT_MANAGER:
+                item = tour.items.filter(flight__isnull=False).first()
+                if item and item.flight:
+                    item_title = f"{item.flight.name} ({item.flight.flight_number})"
+                    item_desc = f"{item.flight.departure_city} → {item.flight.destination_city}"
+                    income = float(item.flight.price)
+                elif tour.items.filter(is_custom_provided=True, custom_service_type='FLIGHT').exists():
+                    c_item = tour.items.filter(is_custom_provided=True, custom_service_type='FLIGHT').first()
+                    item_title = f"Custom: {c_item.custom_provider_name}"
+                    item_desc = c_item.custom_details or "Self-arranged"
+                    income = float(c_item.custom_cost)
+
+            elif role == User.Roles.HOTEL_MANAGER:
+                item = tour.items.filter(hotel__isnull=False).first()
+                if item and item.hotel:
+                    nights = item.quantity or 1
+                    item_title = item.hotel.name
+                    item_desc = f"{item.hotel.location} • {item.hotel.room_type} ({nights} nights)"
+                    income = float(item.hotel.price_per_night * nights)
+                elif tour.items.filter(is_custom_provided=True, custom_service_type='HOTEL').exists():
+                    c_item = tour.items.filter(is_custom_provided=True, custom_service_type='HOTEL').first()
+                    item_title = f"Custom: {c_item.custom_provider_name}"
+                    item_desc = c_item.custom_details or "Self-arranged"
+                    income = float(c_item.custom_cost)
+
+            elif role == User.Roles.RESTAURANT_MANAGER:
+                item = tour.items.filter(restaurant__isnull=False).first()
+                if item and item.restaurant:
+                    meals = item.quantity or 1
+                    item_title = item.restaurant.name
+                    item_desc = f"{item.restaurant.location} • {item.restaurant.cuisine} ({meals} meals)"
+                    income = float(item.restaurant.price_per_meal * meals)
+                elif tour.items.filter(is_custom_provided=True, custom_service_type='RESTAURANT').exists():
+                    c_item = tour.items.filter(is_custom_provided=True, custom_service_type='RESTAURANT').first()
+                    item_title = f"Custom: {c_item.custom_provider_name}"
+                    item_desc = c_item.custom_details or "Self-arranged"
+                    income = float(c_item.custom_cost)
+
+            elif role == User.Roles.RIDE_MANAGER:
+                item = tour.items.filter(ride__isnull=False).first()
+                if item and item.ride:
+                    km = item.quantity or 1
+                    item_title = f"{item.ride.vehicle_type} by {item.ride.provider_name}"
+                    item_desc = f"{item.ride.location} • {km} km"
+                    income = float(item.ride.price_per_km * km)
+                elif tour.items.filter(is_custom_provided=True, custom_service_type='RIDE').exists():
+                    c_item = tour.items.filter(is_custom_provided=True, custom_service_type='RIDE').first()
+                    item_title = f"Custom: {c_item.custom_provider_name}"
+                    item_desc = c_item.custom_details or "Self-arranged"
+                    income = float(c_item.custom_cost)
+
+            elif role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
+                item_title = f"Tour: {tour.title}"
+                item_desc = f"{tour.budget_tier} Tier • {tour.start_date} to {tour.end_date}"
+                income = float(tour.final_price)
+
+            return item_title, item_desc, income
+
+        # 2. Income Calculations
+        from payments.models import Payment
+        estimated_income = 0.0  # Approved tours awaiting payment / in pipeline
+        total_income_alltime = 0.0  # Approved tours that have been paid/unlocked
+
+        for wf in approved_workflows:
+            tour = wf.tour
+            _, _, price = get_tour_service_info(tour, user.role)
+            is_paid = (
+                tour.status in [Tour.Status.UNLOCKED, Tour.Status.COMPLETED] or
+                tour.payments.filter(status=Payment.Statuses.SUCCESSFUL).exists()
+            )
+            if is_paid:
+                total_income_alltime += price
+            else:
+                estimated_income += price
+
+        total_pipeline_value = estimated_income + total_income_alltime
+        avg_revenue = round(total_pipeline_value / total_approved, 2) if total_approved > 0 else 0.0
+
+        # 3. Decision History Table Records
+        decision_history = []
+        actioned_tour_ids = set()
+
+        logs_query = ManagerApproval.objects.all().order_by('-actioned_at')
+        if service_type:
+            logs_query = logs_query.filter(models.Q(manager=user) | models.Q(service_type=service_type))
+
+        for log in logs_query:
+            wf = log.workflow
+            tour = wf.tour
+            actioned_tour_ids.add(tour.id)
+            title, desc, price = get_tour_service_info(tour, user.role)
+            is_paid = (
+                tour.status in [Tour.Status.UNLOCKED, Tour.Status.COMPLETED] or
+                tour.payments.filter(status=Payment.Statuses.SUCCESSFUL).exists()
+            )
+
+            decision_history.append({
+                'id': log.id,
+                'tour_id': tour.id,
+                'tour_title': tour.title,
+                'traveler_username': tour.traveler.username,
+                'traveler_email': tour.traveler.email,
+                'start_date': str(tour.start_date),
+                'end_date': str(tour.end_date),
+                'service_name': title,
+                'service_details': desc,
+                'decision': log.status,
+                'estimated_income': price if log.status == ApprovalStatus.APPROVED else 0.00,
+                'tour_status': tour.status,
+                'is_paid': is_paid,
+                'comments': log.comments or 'No remarks provided.',
+                'actioned_at': log.actioned_at.strftime('%Y-%m-%d %H:%M') if log.actioned_at else '',
+                'actioned_by': 'You' if log.manager == user else (log.manager.username if log.manager else 'System')
+            })
+
+        # Also capture any workflow with status in APPROVED/REJECTED not yet in logs
+        for wf in workflows.filter(models.Q(**{status_field: ApprovalStatus.APPROVED}) | models.Q(**{status_field: ApprovalStatus.REJECTED})):
+            if wf.tour_id not in actioned_tour_ids:
+                tour = wf.tour
+                status_val = getattr(wf, status_field)
+                title, desc, price = get_tour_service_info(tour, user.role)
+                is_paid = (
+                    tour.status in [Tour.Status.UNLOCKED, Tour.Status.COMPLETED] or
+                    tour.payments.filter(status=Payment.Statuses.SUCCESSFUL).exists()
+                )
+                decision_history.append({
+                    'id': f"wf_{wf.id}",
+                    'tour_id': tour.id,
+                    'tour_title': tour.title,
+                    'traveler_username': tour.traveler.username,
+                    'traveler_email': tour.traveler.email,
+                    'start_date': str(tour.start_date),
+                    'end_date': str(tour.end_date),
+                    'service_name': title,
+                    'service_details': desc,
+                    'decision': status_val,
+                    'estimated_income': price if status_val == ApprovalStatus.APPROVED else 0.00,
+                    'tour_status': tour.status,
+                    'is_paid': is_paid,
+                    'comments': wf.admin_remarks if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN] else 'Direct checkpoint transition',
+                    'actioned_at': wf.updated_at.strftime('%Y-%m-%d %H:%M') if wf.updated_at else '',
+                    'actioned_by': 'System / Reviewer'
+                })
 
         # Serialize inventory items managed by this user
         serialized_inventory = []
@@ -169,9 +333,18 @@ class ManagerDashboardView(APIView):
             "role": user.role,
             "metrics": {
                 "assigned_requests_count": queue_count,
+                "total_approved_count": total_approved,
+                "total_rejected_count": total_rejected,
+                "total_decisions_count": total_decisions,
+                "approval_rate": approval_rate,
+                "estimated_income": round(estimated_income, 2),
+                "total_income_alltime": round(total_income_alltime, 2),
+                "total_pipeline_value": round(total_pipeline_value, 2),
+                "average_revenue": avg_revenue,
                 "total_managed_services": len(inventory_items) if isinstance(inventory_items, list) else inventory_items.count()
             },
-            "recent_inventory": serialized_inventory
+            "recent_inventory": serialized_inventory,
+            "decision_history": decision_history
         }, status=status.HTTP_200_OK)
 
 

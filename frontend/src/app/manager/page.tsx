@@ -8,13 +8,41 @@ import {
   ShieldCheck, LogOut, ArrowRight, BookOpen, ClipboardList,
   Layers, ToggleLeft, ToggleRight, Sparkles, Plus, X, MapPin,
   Plane, Hotel, Utensils, Car, Train, Ship, Bus, CheckCircle2,
-  Home, Globe, TrendingUp, Zap, Star
+  Home, Globe, TrendingUp, Zap, Star, DollarSign, XCircle, Check,
+  Percent, Clock, Wallet, ArrowUpRight, Filter
 } from 'lucide-react';
 import Link from 'next/link';
 
 interface ManagerMetrics {
   assigned_requests_count: number;
+  total_approved_count: number;
+  total_rejected_count: number;
+  total_decisions_count: number;
+  approval_rate: number;
+  estimated_income: number;
+  total_income_alltime: number;
+  total_pipeline_value: number;
+  average_revenue: number;
   total_managed_services: number;
+}
+
+interface DecisionRecord {
+  id: string | number;
+  tour_id: number;
+  tour_title: string;
+  traveler_username: string;
+  traveler_email: string;
+  start_date: string;
+  end_date: string;
+  service_name: string;
+  service_details: string;
+  decision: 'APPROVED' | 'REJECTED' | string;
+  estimated_income: number;
+  tour_status: string;
+  is_paid: boolean;
+  comments: string;
+  actioned_at: string;
+  actioned_by: string;
 }
 
 interface InventoryItem {
@@ -34,6 +62,8 @@ export default function ManagerDashboardPage() {
   const { logout } = useAuth();
   const [metrics, setMetrics] = useState<ManagerMetrics | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [decisionHistory, setDecisionHistory] = useState<DecisionRecord[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL');
   const [role, setRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,6 +89,7 @@ export default function ManagerDashboardPage() {
       const res = await api.get('analytics/dashboard/manager/');
       setMetrics(res.data.metrics);
       setInventory(res.data.recent_inventory);
+      setDecisionHistory(res.data.decision_history || []);
       setRole(res.data.role);
     } catch (err) {
       setError('Failed to fetch manager console statistics.');
@@ -239,76 +270,317 @@ export default function ManagerDashboardPage() {
           )}
 
           {/* ─── METRIC CARDS ─── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-            {/* Approvals Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#0f1a24] to-[#0a1520] border border-emerald-500/20 p-6 rounded-2xl space-y-5 flex flex-col justify-between group hover:border-emerald-500/40 transition-all">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-10 translate-x-10" />
-              <div className="relative space-y-3">
-                <div className="flex items-center space-x-2 text-slate-400 text-xs uppercase tracking-wider font-bold">
-                  <ClipboardList className="h-4 w-4 text-emerald-400" />
-                  <span>Pending Sign-offs</span>
-                </div>
-                <div className="flex items-baseline space-x-2">
-                  <p className="text-4xl font-black text-white">{metrics?.assigned_requests_count ?? 0}</p>
+            {/* 1. Pending Approvals Card */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#0f1a24] to-[#0a1520] border border-emerald-500/20 p-5 rounded-2xl flex flex-col justify-between group hover:border-emerald-500/40 transition-all">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/5 rounded-full -translate-y-8 translate-x-8" />
+              <div className="relative space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-400 text-2xs uppercase tracking-wider font-bold">
+                    <ClipboardList className="h-4 w-4 text-emerald-400" />
+                    <span>Pending Sign-offs</span>
+                  </div>
                   {(metrics?.assigned_requests_count ?? 0) > 0 && (
-                    <span className="text-xs text-amber-400 font-bold animate-pulse">Action Required</span>
+                    <span className="text-3xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                      Action Required
+                    </span>
                   )}
                 </div>
-                <p className="text-slate-600 text-2xs leading-relaxed">
-                  Tours waiting in your sequential checkpoint queue. Process immediately for lock updates.
+                <div className="flex items-baseline space-x-2">
+                  <p className="text-3xl font-black text-white">{metrics?.assigned_requests_count ?? 0}</p>
+                  <span className="text-2xs text-slate-500">tours in queue</span>
+                </div>
+                <p className="text-slate-500 text-3xs leading-relaxed">
+                  Tours waiting for your verification in the sequential queue.
                 </p>
               </div>
-              <Link
-                href="/manager/approvals"
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 py-2.5 rounded-xl text-xs font-black flex items-center justify-center space-x-2 transition-all shadow-md shadow-emerald-500/15 hover:scale-[1.02]"
-              >
-                <span>View Approvals Workspace</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+              <div className="pt-3">
+                <Link
+                  href="/manager/approvals"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 py-2 rounded-xl text-xs font-black flex items-center justify-center space-x-1.5 transition-all shadow-md shadow-emerald-500/15"
+                >
+                  <span>Review Queue</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             </div>
 
-            {/* Inventory Card */}
-            <div className="bg-white/3 border border-white/8 p-6 rounded-2xl space-y-5 flex flex-col justify-between hover:border-white/15 transition-all">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-slate-400 text-xs uppercase tracking-wider font-bold">
-                  <Layers className="h-4 w-4 text-emerald-400" />
-                  <span>Catalog Inventory</span>
-                </div>
-                <p className="text-4xl font-black text-white">{metrics?.total_managed_services ?? 0}</p>
-                <p className="text-slate-600 text-2xs leading-relaxed">
-                  Services managed by you. Register new areas or toggle availability for AI matching.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="w-full bg-white/3 border border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/5 text-emerald-400 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Inventory & Service Area</span>
-              </button>
-            </div>
-
-            {/* AI Matching Tips */}
-            <div className="bg-white/3 border border-white/8 p-6 rounded-2xl space-y-4 flex flex-col justify-between hover:border-white/15 transition-all">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-slate-400 text-xs uppercase tracking-wider font-bold">
-                  <Sparkles className="h-4 w-4 text-amber-400" />
-                  <span>AI Location Matching</span>
-                </div>
-                <p className="font-bold text-sm text-white">Targeted Regional Recommendations</p>
-                <p className="text-slate-600 text-2xs leading-relaxed">
-                  Add explicit service areas (London, Dubai, New York, Dhaka) to let the AI engine match your services to traveler tour plans!
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {['London', 'Dubai', 'Tokyo', 'Dhaka'].map(city => (
-                  <span key={city} className="text-2xs bg-white/5 border border-white/8 px-2 py-0.5 rounded-full text-slate-400 flex items-center gap-1">
-                    <MapPin className="h-2.5 w-2.5 text-emerald-400" />
-                    {city}
+            {/* 2. Decisions & Approval Ratio Card */}
+            <div className="bg-white/3 border border-white/8 p-5 rounded-2xl flex flex-col justify-between hover:border-white/15 transition-all">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-400 text-2xs uppercase tracking-wider font-bold">
+                    <ShieldCheck className="h-4 w-4 text-teal-400" />
+                    <span>Approval Ratio</span>
+                  </div>
+                  <span className="text-3xs bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full font-bold">
+                    {metrics?.approval_rate ?? 100}% Rate
                   </span>
-                ))}
+                </div>
+                <div className="flex items-baseline space-x-2">
+                  <p className="text-3xl font-black text-white">{metrics?.total_approved_count ?? 0}</p>
+                  <span className="text-2xs text-emerald-400 font-semibold">Approved</span>
+                  <span className="text-2xs text-slate-600">/</span>
+                  <span className="text-sm font-bold text-rose-400">{metrics?.total_rejected_count ?? 0}</span>
+                  <span className="text-2xs text-slate-500">Declined</span>
+                </div>
+                <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
+                    style={{ width: `${metrics?.approval_rate ?? 100}%` }}
+                  />
+                </div>
+                <p className="text-slate-500 text-3xs">
+                  Total {metrics?.total_decisions_count ?? 0} tour decisions actioned to date.
+                </p>
               </div>
+              <div className="pt-2 text-3xs text-slate-600 flex items-center justify-between border-t border-white/5">
+                <span>Decisions Recorded</span>
+                <span className="font-bold text-slate-400">{metrics?.total_decisions_count ?? 0} tours</span>
+              </div>
+            </div>
+
+            {/* 3. Estimated Pipeline Income Card */}
+            <div className="bg-white/3 border border-white/8 p-5 rounded-2xl flex flex-col justify-between hover:border-white/15 transition-all">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-400 text-2xs uppercase tracking-wider font-bold">
+                    <TrendingUp className="h-4 w-4 text-amber-400" />
+                    <span>Estimated Pipeline Income</span>
+                  </div>
+                  <span className="text-3xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                    Pending Unlock
+                  </span>
+                </div>
+                <div className="flex items-baseline space-x-2">
+                  <p className="text-3xl font-black text-amber-400">
+                    ${(metrics?.estimated_income ?? 0).toFixed(2)}
+                  </p>
+                </div>
+                <p className="text-slate-500 text-3xs leading-relaxed">
+                  Projected revenue from your approved tours currently awaiting traveler checkout.
+                </p>
+              </div>
+              <div className="pt-2 text-3xs text-slate-600 flex items-center justify-between border-t border-white/5">
+                <span>Avg Revenue / Approved Tour</span>
+                <span className="font-bold text-slate-300">${(metrics?.average_revenue ?? 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* 4. Total Realized Income (All-time) Card */}
+            <div className="bg-white/3 border border-white/8 p-5 rounded-2xl flex flex-col justify-between hover:border-white/15 transition-all">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-400 text-2xs uppercase tracking-wider font-bold">
+                    <DollarSign className="h-4 w-4 text-emerald-400" />
+                    <span>Total Realized Income</span>
+                  </div>
+                  <span className="text-3xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                    All-Time
+                  </span>
+                </div>
+                <div className="flex items-baseline space-x-2">
+                  <p className="text-3xl font-black text-emerald-400">
+                    ${(metrics?.total_income_alltime ?? 0).toFixed(2)}
+                  </p>
+                </div>
+                <p className="text-slate-500 text-3xs leading-relaxed">
+                  Actual earnings paid by travelers for your services on unlocked/completed tours.
+                </p>
+              </div>
+              <div className="pt-2 text-3xs text-slate-600 flex items-center justify-between border-t border-white/5">
+                <span>Total Portfolio Pipeline</span>
+                <span className="font-bold text-emerald-400">${(metrics?.total_pipeline_value ?? 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* ─── TABLE: APPROVALS, REJECTIONS & REVENUE HISTORY ─── */}
+          <div className="bg-white/2 border border-white/8 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center space-x-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                  <span>Approvals, Rejections & Income Ledger</span>
+                </h2>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Chronological history of your checkpoint verifications, service income, and current tour booking status.
+                </p>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flex items-center bg-white/3 p-1 rounded-xl border border-white/8 self-start sm:self-auto text-xs font-bold">
+                <button
+                  onClick={() => setHistoryFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    historyFilter === 'ALL'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All ({decisionHistory.length})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter('APPROVED')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    historyFilter === 'APPROVED'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Approved ({metrics?.total_approved_count ?? 0})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter('REJECTED')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    historyFilter === 'REJECTED'
+                      ? 'bg-rose-500 text-white shadow-md font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Rejected ({metrics?.total_rejected_count ?? 0})
+                </button>
+              </div>
+            </div>
+
+            {/* The Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/8 text-2xs uppercase tracking-wider text-slate-500 font-bold">
+                    <th className="py-3 px-3">Tour & Traveler</th>
+                    <th className="py-3 px-3">Service Provided</th>
+                    <th className="py-3 px-3">Your Decision</th>
+                    <th className="py-3 px-3">Estimated Income</th>
+                    <th className="py-3 px-3">Booking Status</th>
+                    <th className="py-3 px-3">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-xs">
+                  {decisionHistory
+                    .filter((item) => {
+                      if (historyFilter === 'APPROVED') return item.decision === 'APPROVED';
+                      if (historyFilter === 'REJECTED') return item.decision === 'REJECTED';
+                      return true;
+                    })
+                    .map((item) => (
+                      <tr key={item.id} className="hover:bg-white/3 transition-colors group">
+                        {/* Tour & Traveler */}
+                        <td className="py-3.5 px-3">
+                          <p className="font-bold text-white text-xs group-hover:text-emerald-400 transition-colors">
+                            {item.tour_title}
+                          </p>
+                          <p className="text-2xs text-slate-500">
+                            Traveler: <strong className="text-slate-400">{item.traveler_username}</strong> ({item.traveler_email})
+                          </p>
+                          <p className="text-3xs text-slate-600 mt-0.5 flex items-center gap-1">
+                            <Clock className="h-2.5 w-2.5" />
+                            <span>{item.start_date} → {item.end_date}</span>
+                          </p>
+                        </td>
+
+                        {/* Service Provided */}
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center space-x-2">
+                            {role === 'FLIGHT_MANAGER' && <Plane className="h-4 w-4 text-sky-400 shrink-0" />}
+                            {role === 'HOTEL_MANAGER' && <Hotel className="h-4 w-4 text-amber-400 shrink-0" />}
+                            {role === 'RESTAURANT_MANAGER' && <Utensils className="h-4 w-4 text-rose-400 shrink-0" />}
+                            {role === 'RIDE_MANAGER' && <Car className="h-4 w-4 text-teal-400 shrink-0" />}
+                            <div>
+                              <p className="font-semibold text-slate-200 text-xs">{item.service_name}</p>
+                              <p className="text-2xs text-slate-500">{item.service_details}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Decision & Action Date */}
+                        <td className="py-3.5 px-3">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-extrabold border ${
+                              item.decision === 'APPROVED'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                            }`}
+                          >
+                            {item.decision === 'APPROVED' ? (
+                              <CheckCircle2 className="h-3 w-3" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                            <span>{item.decision}</span>
+                          </span>
+                          <p className="text-3xs text-slate-600 mt-1">
+                            {item.actioned_at} {item.actioned_by && `• by ${item.actioned_by}`}
+                          </p>
+                        </td>
+
+                        {/* Estimated Income */}
+                        <td className="py-3.5 px-3">
+                          {item.decision === 'APPROVED' ? (
+                            <div>
+                              <span className="font-black text-emerald-400 text-sm">
+                                +${parseFloat(String(item.estimated_income || 0)).toFixed(2)}
+                              </span>
+                              <span className="text-3xs text-slate-500 block">
+                                {item.is_paid ? 'Realized Cash' : 'Pipeline Potential'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-600 text-xs font-semibold">$0.00</span>
+                          )}
+                        </td>
+
+                        {/* Tour Lifecycle Booking Status */}
+                        <td className="py-3.5 px-3">
+                          {item.is_paid ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-3xs font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                              <Check className="h-2.5 w-2.5 text-teal-400" />
+                              <span>Paid & Unlocked</span>
+                            </span>
+                          ) : item.tour_status === 'LOCKED' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-3xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                              <span>🔒 Awaiting Payment</span>
+                            </span>
+                          ) : item.tour_status === 'REJECTED' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-3xs font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                              <span>Declined Tour</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-3xs font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              <span>⏳ In Checkpoint Review</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Remarks */}
+                        <td className="py-3.5 px-3 max-w-[200px]">
+                          <p className="text-2xs text-slate-400 italic truncate" title={item.comments}>
+                            "{item.comments}"
+                          </p>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+
+              {decisionHistory.length === 0 && (
+                <div className="text-center py-12 border border-dashed border-white/8 rounded-xl space-y-3">
+                  <ShieldCheck className="h-10 w-10 text-slate-700 mx-auto" />
+                  <p className="text-sm font-semibold text-slate-400">No approval decisions recorded yet.</p>
+                  <p className="text-2xs text-slate-600 max-w-sm mx-auto">
+                    When you review tours in the Approvals Workspace, your approved and rejected tours with calculated service earnings will be displayed in this ledger.
+                  </p>
+                  <Link
+                    href="/manager/approvals"
+                    className="inline-flex items-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2 px-4 rounded-xl text-xs transition-all shadow-md shadow-emerald-500/20"
+                  >
+                    <span>Go to Approvals Workspace</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 

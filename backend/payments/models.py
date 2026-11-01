@@ -75,3 +75,24 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment {self.transaction_id or self.id} - Tour {self.tour_id} - {self.status}"
+
+
+class Refund(models.Model):
+    class Statuses(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        COMPLETED = 'COMPLETED', 'Completed'
+        FAILED = 'FAILED', 'Failed'
+
+    tour = models.ForeignKey(Tour, on_delete=models.CASCADE, related_name='refunds')
+    traveler = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='refunds')
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='refunds')
+    service_type = models.CharField(max_length=50)  # FLIGHT, HOTEL, RESTAURANT, RIDE
+    service_name = models.CharField(max_length=150, blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=Statuses.choices, default=Statuses.COMPLETED)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Refund ${self.amount} for {self.service_type} on Tour {self.tour_id} ({self.status})"

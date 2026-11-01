@@ -18,6 +18,11 @@ def send_email_task(user_id, subject, message_content):
         
         logger.info(f"Dispatching email to {recipient} with subject: {subject}")
         
+        # If no SMTP credentials configured, skip attempting remote socket connection
+        if not getattr(settings, 'EMAIL_HOST_USER', None) and 'smtp' in getattr(settings, 'EMAIL_BACKEND', '').lower():
+            logger.info(f"Skipping remote SMTP dispatcher for {recipient} - EMAIL_HOST_USER not configured.")
+            return f"Email simulated (no credentials): {recipient}"
+
         send_mail(
             subject=subject,
             message=message_content,

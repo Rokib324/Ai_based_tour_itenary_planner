@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from payments.models import Payment
+from payments.models import Payment, Refund
 
 class PaymentSerializer(serializers.ModelSerializer):
     tour_title = serializers.CharField(source='tour.title', read_only=True)
@@ -13,3 +13,17 @@ class PaymentSerializer(serializers.ModelSerializer):
             'transaction_id', 'created_at', 'updated_at'
         )
         read_only_fields = ('traveler', 'status', 'transaction_id')
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    tour_title = serializers.CharField(source='tour.title', read_only=True)
+    traveler_email = serializers.EmailField(source='traveler.email', read_only=True)
+
+    class Meta:
+        model = Refund
+        fields = (
+            'id', 'tour', 'tour_title', 'traveler', 'traveler_email',
+            'payment', 'service_type', 'service_name', 'amount',
+            'reason', 'status', 'created_at', 'updated_at'
+        )
+        read_only_fields = ('traveler', 'status')
