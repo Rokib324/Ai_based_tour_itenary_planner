@@ -7,7 +7,8 @@ from tours.views import (
     RideServiceViewSet,
     TourPackageViewSet,
     TourViewSet,
-    generate_itinerary
+    generate_itinerary,
+    generate_services
 )
 
 router = DefaultRouter()
@@ -20,5 +21,6 @@ router.register('tours', TourViewSet, basename='tour')
 
 urlpatterns = [
     path('generate-itinerary/', generate_itinerary, name='generate-itinerary'),
+    path('generate-services/', generate_services, name='generate-services'),
     path('', include(router.urls)),
 ]

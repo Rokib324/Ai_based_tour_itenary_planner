@@ -111,6 +111,21 @@ function calculateDuration(start: string, end: string): { nights: number; days: 
   };
 }
 
+function mergeServices(existing: CatalogItem[], incoming: CatalogItem[]): CatalogItem[] {
+  const map = new Map<number, CatalogItem>();
+  if (Array.isArray(incoming)) {
+    incoming.forEach(item => {
+      if (item && item.id) map.set(item.id, item);
+    });
+  }
+  if (Array.isArray(existing)) {
+    existing.forEach(item => {
+      if (item && item.id && !map.has(item.id)) map.set(item.id, item);
+    });
+  }
+  return Array.from(map.values());
+}
+
 function getTransportIcon(vehicleType = '') {
   const vt = vehicleType.toLowerCase();
   if (vt.includes('train') || vt.includes('rail')) return <Train className="h-4 w-4 text-sky-400" />;
@@ -260,6 +275,8 @@ export default function CreateTourPage() {
   const [restaurants, setRestaurants] = useState<CatalogItem[]>([]);
   const [rides, setRides] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [servicesGenerating, setServicesGenerating] = useState(false);
+  const [servicesGeneratedFor, setServicesGeneratedFor] = useState('');
 
   /* ── Groq AI Itinerary State ── */
   const [itineraryData, setItineraryData] = useState<any>(null);
@@ -324,11 +341,49 @@ export default function CreateTourPage() {
     }
   }, [duration.nights]);
 
+  /* ── AI Service Generator for Destination ── */
+  const fetchDestinationServices = async (targetDest?: string, forceAi = false) => {
+    const dest = (targetDest || destination).trim();
+    if (!dest) return;
+    setServicesGenerating(true);
+    try {
+      if (forceAi) {
+        const res = await api.post('tours/generate-services/', {
+          destination: dest,
+          budget_tier: budgetTier,
+        });
+        if (res.data) {
+          if (res.data.flights) setFlights(prev => mergeServices(prev, res.data.flights));
+          if (res.data.hotels) setHotels(prev => mergeServices(prev, res.data.hotels));
+          if (res.data.rides) setRides(prev => mergeServices(prev, res.data.rides));
+          if (res.data.restaurants) setRestaurants(prev => mergeServices(prev, res.data.restaurants));
+        }
+      } else {
+        const encoded = encodeURIComponent(dest);
+        const [fR, hR, rR, riR] = await Promise.all([
+          api.get(`tours/flights/?destination=${encoded}`),
+          api.get(`tours/hotels/?destination=${encoded}`),
+          api.get(`tours/restaurants/?destination=${encoded}`),
+          api.get(`tours/rides/?destination=${encoded}`),
+        ]);
+        if (fR.data) setFlights(prev => mergeServices(prev, fR.data));
+        if (hR.data) setHotels(prev => mergeServices(prev, hR.data));
+        if (rR.data) setRestaurants(prev => mergeServices(prev, rR.data));
+        if (riR.data) setRides(prev => mergeServices(prev, riR.data));
+      }
+      setServicesGeneratedFor(dest);
+    } catch (err) {
+      console.error('Failed to load/generate destination services', err);
+    } finally {
+      setServicesGenerating(false);
+    }
+  };
+
   /* ── Destination Filter matching helper ── */
   const matchesLocation = (loc = '') => {
-    if (!destination.trim()) return true;
+    if (!destination.trim()) return false;
     const dest = destination.toLowerCase().trim();
-    const target = loc.toLowerCase().trim();
+    const target = (loc || '').toLowerCase().trim();
     return target.includes(dest) || dest.includes(target);
   };
 
@@ -434,6 +489,10 @@ export default function CreateTourPage() {
 
   const handleNextToStep3 = () => {
     setStep(3);
+    const dest = destination.trim();
+    if (dest && servicesGeneratedFor.toLowerCase() !== dest.toLowerCase()) {
+      fetchDestinationServices(dest);
+    }
   };
 
   const handleNextToStep4 = () => {
@@ -449,11 +508,20 @@ export default function CreateTourPage() {
       const res = await api.post('tours/generate-itinerary/', {
         destination: destination.trim(),
         days: duration.days || 3,
-        interests: notes.trim() || 'culture, sightseeing and local food'
+        interests: notes.trim() || 'culture, sightseeing and local food',
+        budget_tier: budgetTier,
       });
       setItineraryData(res.data);
-      if (res.data.destination && (!tourTitle || tourTitle.startsWith('My Trip to '))) {
+      if (res.data?.destination && (!tourTitle || tourTitle.startsWith('My Trip to '))) {
         setTourTitle(`Trip to ${res.data.destination} (${duration.days || 3} Days)`);
+      }
+      if (res.data?.services) {
+        const s = res.data.services;
+        if (s.flights) setFlights(prev => mergeServices(prev, s.flights));
+        if (s.hotels) setHotels(prev => mergeServices(prev, s.hotels));
+        if (s.rides) setRides(prev => mergeServices(prev, s.rides));
+        if (s.restaurants) setRestaurants(prev => mergeServices(prev, s.restaurants));
+        setServicesGeneratedFor(destination.trim());
       }
     } catch (err: any) {
       console.error(err);
@@ -931,14 +999,35 @@ export default function CreateTourPage() {
               ══════════════════════════════════════════ */}
               {step === 3 && (
                 <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
-                  <div>
-                    <h2 className="text-xl font-black flex items-center gap-2">
-                      <Compass className="w-5 h-5 text-emerald-400" />
-                      Select Services {destination && `in ${destination}`}
-                    </h2>
-                    <p className="text-slate-400 text-xs mt-1">
-                      Choose at least one service. You can toggle flights, hotels, dining, and local rides.
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+                    <div>
+                      <h2 className="text-xl font-black flex items-center gap-2">
+                        <Compass className="w-5 h-5 text-emerald-400" />
+                        Select Services {destination && <span className="text-emerald-400">in {destination}</span>}
+                      </h2>
+                      <p className="text-slate-400 text-xs mt-1">
+                        AI-generated flights, hotels, dining, and local rides curated specifically for {destination || 'your destination'}.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fetchDestinationServices(destination, true)}
+                      disabled={servicesGenerating}
+                      className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white px-4 py-2.5 rounded-xl border border-slate-700 hover:border-emerald-500/50 text-xs font-bold transition-all disabled:opacity-50 active:scale-95 shadow-sm self-start sm:self-auto"
+                    >
+                      {servicesGenerating ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                          <span>Generating AI Services...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Regenerate AI Services</span>
+                        </>
+                      )}
+                    </button>
                   </div>
 
                   {errors.services && (
@@ -965,7 +1054,7 @@ export default function CreateTourPage() {
                         >
                           <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-300">
                             <Plane className="w-4 h-4 text-emerald-400" />
-                            Flights {destination && `to/from ${destination}`}
+                            Flights {destination && `to ${destination}`}
                             {selectedFlight && (
                               <span className="text-emerald-400 text-2xs font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase">
                                 1 selected
@@ -977,22 +1066,38 @@ export default function CreateTourPage() {
 
                         {showFlights && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {(filteredFlights.length > 0 ? filteredFlights : flights).map(f => (
-                              <ServiceCard
-                                key={f.id}
-                                item={f}
-                                selected={selectedFlight?.id === f.id}
-                                onToggle={() => {
-                                  setSelectedFlight(selectedFlight?.id === f.id ? null : f);
-                                  setErrors(prev => ({ ...prev, services: '' }));
-                                }}
-                                subtitle={`Route: ${f.departure_city} → ${f.destination_city}`}
-                                price={`$${f.price}`}
-                                icon={<Plane className="w-4 h-4 text-emerald-400" />}
-                              />
-                            ))}
-                            {(filteredFlights.length === 0 && flights.length === 0) && (
-                              <p className="text-xs text-slate-500 italic sm:col-span-2">No flights currently available.</p>
+                            {filteredFlights.length > 0 ? (
+                              filteredFlights.map(f => (
+                                <ServiceCard
+                                  key={f.id}
+                                  item={f}
+                                  selected={selectedFlight?.id === f.id}
+                                  onToggle={() => {
+                                    setSelectedFlight(selectedFlight?.id === f.id ? null : f);
+                                    setErrors(prev => ({ ...prev, services: '' }));
+                                  }}
+                                  subtitle={`Route: ${f.departure_city} → ${f.destination_city}`}
+                                  price={`$${f.price}`}
+                                  icon={<Plane className="w-4 h-4 text-emerald-400" />}
+                                />
+                              ))
+                            ) : servicesGenerating ? (
+                              <div className="sm:col-span-2 py-8 flex flex-col items-center justify-center gap-2 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-slate-400">
+                                <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                                <span className="text-xs">Curating flights for {destination}...</span>
+                              </div>
+                            ) : (
+                              <div className="sm:col-span-2 py-6 px-4 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-center space-y-2">
+                                <p className="text-xs text-slate-400">No flights for {destination} loaded yet.</p>
+                                <button
+                                  type="button"
+                                  onClick={() => fetchDestinationServices(destination, true)}
+                                  className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline underline-offset-4"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  <span>Generate flights with Groq AI</span>
+                                </button>
+                              </div>
                             )}
                           </div>
                         )}
@@ -1007,7 +1112,7 @@ export default function CreateTourPage() {
                         >
                           <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-300">
                             <Car className="w-4 h-4 text-emerald-400" />
-                            Transport, Trains, Ferry & Rides
+                            Transport & Rides in {destination || 'Destination'}
                             {selectedRide && (
                               <span className="text-emerald-400 text-2xs font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase">
                                 1 selected
@@ -1020,20 +1125,39 @@ export default function CreateTourPage() {
                         {showRides && (
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {(filteredRides.length > 0 ? filteredRides : rides).map(r => (
-                                <ServiceCard
-                                  key={r.id}
-                                  item={r}
-                                  selected={selectedRide?.id === r.id}
-                                  onToggle={() => {
-                                    setSelectedRide(selectedRide?.id === r.id ? null : r);
-                                    setErrors(prev => ({ ...prev, services: '' }));
-                                  }}
-                                  subtitle={`${r.provider_name} · ${r.location}`}
-                                  price={`$${r.price_per_km}/km`}
-                                  icon={getTransportIcon(r.vehicle_type)}
-                                />
-                              ))}
+                              {filteredRides.length > 0 ? (
+                                filteredRides.map(r => (
+                                  <ServiceCard
+                                    key={r.id}
+                                    item={r}
+                                    selected={selectedRide?.id === r.id}
+                                    onToggle={() => {
+                                      setSelectedRide(selectedRide?.id === r.id ? null : r);
+                                      setErrors(prev => ({ ...prev, services: '' }));
+                                    }}
+                                    subtitle={`${r.provider_name} · ${r.location}`}
+                                    price={`$${r.price_per_km}/km`}
+                                    icon={getTransportIcon(r.vehicle_type)}
+                                  />
+                                ))
+                              ) : servicesGenerating ? (
+                                <div className="sm:col-span-2 py-8 flex flex-col items-center justify-center gap-2 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-slate-400">
+                                  <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                                  <span className="text-xs">Curating rides in {destination}...</span>
+                                </div>
+                              ) : (
+                                <div className="sm:col-span-2 py-6 px-4 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-center space-y-2">
+                                  <p className="text-xs text-slate-400">No transport options for {destination} loaded yet.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => fetchDestinationServices(destination, true)}
+                                    className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline underline-offset-4"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>Generate transport with Groq AI</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             {selectedRide && (
                               <Stepper
@@ -1059,7 +1183,7 @@ export default function CreateTourPage() {
                         >
                           <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-300">
                             <Hotel className="w-4 h-4 text-emerald-400" />
-                            Hotels & Accommodations
+                            Hotels & Accommodations in {destination || 'Destination'}
                             {selectedHotel && (
                               <span className="text-emerald-400 text-2xs font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase">
                                 1 selected
@@ -1072,20 +1196,39 @@ export default function CreateTourPage() {
                         {showHotels && (
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {(filteredHotels.length > 0 ? filteredHotels : hotels).map(h => (
-                                <ServiceCard
-                                  key={h.id}
-                                  item={h}
-                                  selected={selectedHotel?.id === h.id}
-                                  onToggle={() => {
-                                    setSelectedHotel(selectedHotel?.id === h.id ? null : h);
-                                    setErrors(prev => ({ ...prev, services: '' }));
-                                  }}
-                                  subtitle={`${h.room_type} · ${h.location}`}
-                                  price={`$${h.price_per_night}/night`}
-                                  icon={<Hotel className="w-4 h-4 text-emerald-400" />}
-                                />
-                              ))}
+                              {filteredHotels.length > 0 ? (
+                                filteredHotels.map(h => (
+                                  <ServiceCard
+                                    key={h.id}
+                                    item={h}
+                                    selected={selectedHotel?.id === h.id}
+                                    onToggle={() => {
+                                      setSelectedHotel(selectedHotel?.id === h.id ? null : h);
+                                      setErrors(prev => ({ ...prev, services: '' }));
+                                    }}
+                                    subtitle={`${h.room_type} · ${h.location}`}
+                                    price={`$${h.price_per_night}/night`}
+                                    icon={<Hotel className="w-4 h-4 text-emerald-400" />}
+                                  />
+                                ))
+                              ) : servicesGenerating ? (
+                                <div className="sm:col-span-2 py-8 flex flex-col items-center justify-center gap-2 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-slate-400">
+                                  <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                                  <span className="text-xs">Curating hotels in {destination}...</span>
+                                </div>
+                              ) : (
+                                <div className="sm:col-span-2 py-6 px-4 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-center space-y-2">
+                                  <p className="text-xs text-slate-400">No hotels for {destination} loaded yet.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => fetchDestinationServices(destination, true)}
+                                    className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline underline-offset-4"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>Generate hotels with Groq AI</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             {selectedHotel && (
                               <Stepper
@@ -1111,7 +1254,7 @@ export default function CreateTourPage() {
                         >
                           <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-300">
                             <Utensils className="w-4 h-4 text-emerald-400" />
-                            Restaurants & Dining
+                            Restaurants & Dining in {destination || 'Destination'}
                             {selectedRest && (
                               <span className="text-emerald-400 text-2xs font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase">
                                 1 selected
@@ -1124,20 +1267,39 @@ export default function CreateTourPage() {
                         {showRests && (
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {(filteredRests.length > 0 ? filteredRests : restaurants).map(r => (
-                                <ServiceCard
-                                  key={r.id}
-                                  item={r}
-                                  selected={selectedRest?.id === r.id}
-                                  onToggle={() => {
-                                    setSelectedRest(selectedRest?.id === r.id ? null : r);
-                                    setErrors(prev => ({ ...prev, services: '' }));
-                                  }}
-                                  subtitle={`Cuisine: ${r.cuisine} · ${r.location}`}
-                                  price={`$${r.price_per_meal}/meal`}
-                                  icon={<Utensils className="w-4 h-4 text-emerald-400" />}
-                                />
-                              ))}
+                              {filteredRests.length > 0 ? (
+                                filteredRests.map(r => (
+                                  <ServiceCard
+                                    key={r.id}
+                                    item={r}
+                                    selected={selectedRest?.id === r.id}
+                                    onToggle={() => {
+                                      setSelectedRest(selectedRest?.id === r.id ? null : r);
+                                      setErrors(prev => ({ ...prev, services: '' }));
+                                    }}
+                                    subtitle={`Cuisine: ${r.cuisine} · ${r.location}`}
+                                    price={`$${r.price_per_meal}/meal`}
+                                    icon={<Utensils className="w-4 h-4 text-emerald-400" />}
+                                  />
+                                ))
+                              ) : servicesGenerating ? (
+                                <div className="sm:col-span-2 py-8 flex flex-col items-center justify-center gap-2 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-slate-400">
+                                  <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                                  <span className="text-xs">Curating dining in {destination}...</span>
+                                </div>
+                              ) : (
+                                <div className="sm:col-span-2 py-6 px-4 bg-slate-950/40 rounded-2xl border border-slate-800/60 text-center space-y-2">
+                                  <p className="text-xs text-slate-400">No restaurants for {destination} loaded yet.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => fetchDestinationServices(destination, true)}
+                                    className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline underline-offset-4"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>Generate dining with Groq AI</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             {selectedRest && (
                               <Stepper
