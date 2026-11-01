@@ -7,7 +7,7 @@ import {
   ShieldCheck, User, Calendar, Sparkles, Check, X, HelpCircle,
   Home, ArrowLeft, Plane, Hotel, Utensils, Car, Globe, DollarSign,
   Clock, AlertTriangle, TrendingUp, CheckCircle2, XCircle, Loader2,
-  ChevronRight, Info, MessageSquare, BarChart3
+  ChevronRight, Info, MessageSquare, BarChart3, CloudSun, MapPin
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -391,12 +391,27 @@ export default function ApprovalWorkspacePage() {
                             </p>
                             <p className="font-black text-emerald-400 text-sm">${aiReport.future_cost_prediction?.toFixed(2)}</p>
                           </div>
-                          <div className="bg-white/3 rounded-xl p-3">
+                          <div className="bg-white/3 rounded-xl p-3 space-y-1">
                             <p className="text-slate-600 font-semibold mb-1 flex items-center gap-1">
-                              <Globe className="h-3 w-3 text-teal-400" />
-                              Weather
+                              <CloudSun className="h-3 w-3 text-teal-400" />
+                              Weather at Destination
                             </p>
-                            <p className="font-bold text-slate-300 text-xs">{aiReport.weather_recommendations?.condition || 'N/A'}</p>
+                            <p className="font-bold text-slate-200 text-xs">
+                              {aiReport.weather_recommendations?.condition || 'N/A'}{' '}
+                              {aiReport.weather_recommendations?.temp && `(${aiReport.weather_recommendations.temp})`}
+                            </p>
+                            {aiReport.weather_recommendations?.location && (
+                              <p className="text-3xs text-teal-300/80 flex items-center gap-1 truncate" title={aiReport.weather_recommendations.location}>
+                                <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                <span>{aiReport.weather_recommendations.location}</span>
+                              </p>
+                            )}
+                            {aiReport.weather_recommendations?.date_formatted && (
+                              <p className="text-3xs text-slate-500 flex items-center gap-1">
+                                <Calendar className="h-2.5 w-2.5 shrink-0" />
+                                <span>Start: {aiReport.weather_recommendations.date_formatted}</span>
+                              </p>
+                            )}
                           </div>
                         </div>
 

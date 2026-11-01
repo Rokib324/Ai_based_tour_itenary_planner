@@ -120,38 +120,23 @@ class ManagerDashboardView(APIView):
             return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
             
         # Count pending queue items for approvals
-        from approvals.views import TourApprovalViewSet
-        # Instantiate approval viewset to reuse its custom queue filtering
-        # Or query directly based on role
         queue_count = 0
-        workflows = TourApproval.objects.all()
+        workflows = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED])
         
-        if user.role == User.Roles.FLIGHT_MANAGER:
-            queue_count = workflows.filter(admin_status=ApprovalStatus.APPROVED, flight_status=ApprovalStatus.PENDING).count()
+        if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
+            queue_count = workflows.filter(admin_status=ApprovalStatus.PENDING).count()
+            inventory_items = []
+        elif user.role == User.Roles.FLIGHT_MANAGER:
+            queue_count = workflows.filter(flight_status=ApprovalStatus.PENDING).count()
             inventory_items = FlightService.objects.filter(manager=user)
         elif user.role == User.Roles.HOTEL_MANAGER:
-            queue_count = workflows.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status=ApprovalStatus.PENDING
-            ).count()
+            queue_count = workflows.filter(hotel_status=ApprovalStatus.PENDING).count()
             inventory_items = HotelService.objects.filter(manager=user)
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            queue_count = workflows.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                restaurant_status=ApprovalStatus.PENDING
-            ).count()
+            queue_count = workflows.filter(restaurant_status=ApprovalStatus.PENDING).count()
             inventory_items = RestaurantService.objects.filter(manager=user)
         elif user.role == User.Roles.RIDE_MANAGER:
-            queue_count = workflows.filter(
-                admin_status=ApprovalStatus.APPROVED,
-                flight_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                hotel_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                restaurant_status__in=[ApprovalStatus.APPROVED, ApprovalStatus.SKIPPED],
-                ride_status=ApprovalStatus.PENDING
-            ).count()
+            queue_count = workflows.filter(ride_status=ApprovalStatus.PENDING).count()
             inventory_items = RideService.objects.filter(manager=user)
         else:
             inventory_items = []
@@ -184,7 +169,7 @@ class ManagerDashboardView(APIView):
             "role": user.role,
             "metrics": {
                 "assigned_requests_count": queue_count,
-                "total_managed_services": inventory_items.count() if hasattr(inventory_items, 'count') else len(inventory_items)
+                "total_managed_services": len(inventory_items) if isinstance(inventory_items, list) else inventory_items.count()
             },
             "recent_inventory": serialized_inventory
         }, status=status.HTTP_200_OK)

@@ -439,32 +439,75 @@ export default function TravelerDashboardPage() {
                               </div>
 
                               {/* Weather */}
-                              <div className="bg-[#0f1a24] border border-white/8 rounded-xl p-4 space-y-3">
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-teal-400">
-                                  <CloudSun className="h-3.5 w-3.5" />
-                                  <span>Weather Insights</span>
-                                </div>
-                                {aiReports[t.id].weather_recommendations ? (
-                                  <div className="space-y-1.5 text-2xs">
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-500">Condition:</span>
-                                      <span className="font-bold text-slate-300 text-right max-w-[100px]">{aiReports[t.id].weather_recommendations.condition}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-500">Temp:</span>
-                                      <span className="font-bold text-slate-300">{aiReports[t.id].weather_recommendations.temp}</span>
-                                    </div>
-                                    {aiReports[t.id].weather_recommendations.alert && (
-                                      <div className="mt-2 flex items-start gap-1 text-amber-300 bg-amber-500/5 border border-amber-500/15 p-1.5 rounded">
-                                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                                        <span className="text-3xs">{aiReports[t.id].weather_recommendations.alert}</span>
+                              {(() => {
+                                const w = aiReports[t.id]?.weather_recommendations;
+                                return (
+                                  <div className="bg-[#0f1a24] border border-white/8 rounded-xl p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5 text-xs font-bold text-teal-400">
+                                        <CloudSun className="h-3.5 w-3.5" />
+                                        <span>Weather Insights</span>
                                       </div>
+                                      {w?.temp && (
+                                        <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                                          {w.temp}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {w ? (
+                                      <div className="space-y-2 text-2xs">
+                                        {/* Destination Location */}
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-slate-500 flex items-center gap-1 shrink-0">
+                                            <MapPin className="h-3 w-3 text-teal-400" />
+                                            Location:
+                                          </span>
+                                          <span className="font-bold text-slate-200 text-right truncate max-w-[130px]" title={w.location}>
+                                            {w.location || 'Tour Destination'}
+                                          </span>
+                                        </div>
+
+                                        {/* Starting Date */}
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-slate-500 flex items-center gap-1 shrink-0">
+                                            <Calendar className="h-3 w-3 text-slate-400" />
+                                            Start Date:
+                                          </span>
+                                          <span className="font-semibold text-slate-200 text-right">
+                                            {w.date_formatted || t.start_date}
+                                          </span>
+                                        </div>
+
+                                        {/* Condition */}
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-slate-500">Condition:</span>
+                                          <span className="font-bold text-teal-300 text-right truncate max-w-[130px]">
+                                            {w.condition || 'Pleasant & Mild'}
+                                          </span>
+                                        </div>
+
+                                        {/* Summary */}
+                                        {w.summary && (
+                                          <p className="text-3xs text-slate-400 italic bg-white/3 p-1.5 rounded border border-white/5">
+                                            {w.summary}
+                                          </p>
+                                        )}
+
+                                        {/* Alert if any */}
+                                        {w.alert && (
+                                          <div className="mt-1 flex items-start gap-1 text-amber-300 bg-amber-500/10 border border-amber-500/20 p-1.5 rounded">
+                                            <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-amber-400" />
+                                            <span className="text-3xs">{w.alert}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-2xs text-slate-600">No weather data available</span>
                                     )}
                                   </div>
-                                ) : (
-                                  <span className="text-2xs text-slate-600">No weather data available</span>
-                                )}
-                              </div>
+                                );
+                              })()}
 
                               {/* Savings */}
                               <div className="bg-[#0f1a24] border border-white/8 rounded-xl p-4 space-y-3">

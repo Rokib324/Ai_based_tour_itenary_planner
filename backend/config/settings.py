@@ -229,3 +229,7 @@ if 'test' in sys.argv or 'verify_e2e' in sys.argv:
 # Groq Cloud AI Configuration
 GROQ_API_KEY = env('GROQ_API_KEY', default='')
 GROQ_MODEL = env('GROQ_MODEL', default='llama-3.3-70b-versatile')
+
+# OpenWeatherMap API Configuration
+OPENWEATHER_API_KEY = env('OPENWEATHER_API_KEY', default='2d24fc3e13a0fac693f0b0761c2284f8')
+OPENWEATHER_API_URL = env('OPENWEATHER_API_URL', default='https://api.openweathermap.org/data/2.5/weather?units=metric&q=')

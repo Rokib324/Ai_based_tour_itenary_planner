@@ -172,54 +172,135 @@ class AIEngine:
                 
         return alternatives
 
-    def get_weather_recommendations(self, destination):
+    def get_weather_recommendations(self, destination, start_date=None):
         """
-        Queries Gemini API to fetch weather details, temperatures, and alerts,
-        with an extensive local fallback database.
+        Fetches authentic real-time weather and forecast details from OpenWeatherMap API
+        for the given tour destination and starting date.
         """
-        if not AIEngine._gemini_disabled:
-            api_key = getattr(settings, 'GEMINI_API_KEY', '')
-            if api_key:
-                prompt = (
-                    f"Provide simulated current weather details for destination: '{destination}'.\n"
-                    "Return a JSON object with these exact keys:\n"
-                    "- 'temp' (string, e.g. '25C')\n"
-                    "- 'condition' (string, e.g. 'Sunny' or 'Rainy')\n"
-                    "- 'best_months' (string, e.g. 'Nov to Mar')\n"
-                    "- 'alert' (string, weather alert / reminder, or null if none)\n"
-                )
-                gemini_res = self._call_gemini(prompt)
-                if gemini_res and isinstance(gemini_res, dict):
-                    return {
-                        'temp': gemini_res.get('temp', '26C'),
-                        'condition': gemini_res.get('condition', 'Mild'),
-                        'best_months': gemini_res.get('best_months', 'Oct to Apr'),
-                        'alert': gemini_res.get('alert')
-                    }
+        dest_clean = (destination or "Cox's Bazar").split(',')[0].strip()
+        date_str = str(start_date) if start_date else ""
+        date_formatted = ""
+        if start_date:
+            try:
+                if hasattr(start_date, 'strftime'):
+                    date_formatted = start_date.strftime("%b %d, %Y")
+                elif isinstance(start_date, str):
+                    from datetime import datetime
+                    dt = datetime.strptime(start_date, "%Y-%m-%d")
+                    date_formatted = dt.strftime("%b %d, %Y")
+            except Exception:
+                date_formatted = str(start_date)
 
-        # Extensive Local Meteorological Database
-        weather_db = {
-            "cox's bazar": {'temp': '28C', 'condition': 'Sunny / Coastal Breeze', 'best_months': 'Nov to Mar', 'alert': 'Ideal beach weather. Mild UV.'},
-            'sylhet': {'temp': '25C', 'condition': 'Mild & Refreshing', 'best_months': 'Oct to Mar', 'alert': 'Occasional morning mist in highlands.'},
-            'chittagong': {'temp': '29C', 'condition': 'Warm Coastal', 'best_months': 'Nov to Feb', 'alert': 'Good outdoor sightseeing conditions.'},
-            'dhaka': {'temp': '30C', 'condition': 'Tropical Warm', 'best_months': 'Nov to Feb', 'alert': 'Carry water during mid-day outdoor activities.'},
-            'nyc': {'temp': '22C', 'condition': 'Sunny', 'best_months': 'May to Oct', 'alert': None},
-            'new york': {'temp': '22C', 'condition': 'Sunny', 'best_months': 'May to Oct', 'alert': None},
-            'london': {'temp': '16C', 'condition': 'Partly Cloudy', 'best_months': 'Jun to Sep', 'alert': 'Carry a light jacket.'},
-            'dubai': {'temp': '36C', 'condition': 'Desert Sunny', 'best_months': 'Nov to Mar', 'alert': 'High UV index, stay hydrated.'},
-            'paris': {'temp': '19C', 'condition': 'Pleasant / Clear', 'best_months': 'Apr to Oct', 'alert': None},
-            'tokyo': {'temp': '21C', 'condition': 'Clear & Cool', 'best_months': 'Mar to May, Sep to Nov', 'alert': None},
-            'bali': {'temp': '29C', 'condition': 'Tropical Breeze', 'best_months': 'Apr to Oct', 'alert': 'Excellent beach and surfing conditions.'},
-            'singapore': {'temp': '30C', 'condition': 'Warm Tropical', 'best_months': 'Year-Round', 'alert': 'Occasional afternoon rain showers.'},
-            'bangkok': {'temp': '32C', 'condition': 'Sunny / Warm', 'best_months': 'Nov to Feb', 'alert': None},
-        }
-        
-        dest_key = destination.lower().strip()
-        for key, value in weather_db.items():
-            if key in dest_key or dest_key in key:
-                return value
+        api_key = getattr(settings, 'OPENWEATHER_API_KEY', '') or '2d24fc3e13a0fac693f0b0761c2284f8'
+
+        try:
+            # 1. Fetch current weather for the destination location
+            weather_url = f"https://api.openweathermap.org/data/2.5/weather?units=metric&q={dest_clean}&appid={api_key}"
+            w_res = requests.get(weather_url, timeout=5)
+            
+            w_data = None
+            if w_res.status_code == 200:
+                w_data = w_res.json()
+
+            # 2. Try fetching 5-day forecast to check if start_date has a direct forecast
+            target_data = None
+            if date_str:
+                try:
+                    forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?units=metric&q={dest_clean}&appid={api_key}"
+                    f_res = requests.get(forecast_url, timeout=5)
+                    if f_res.status_code == 200:
+                        f_data = f_res.json()
+                        for item in f_data.get('list', []):
+                            if item.get('dt_txt', '').startswith(date_str):
+                                target_data = item
+                                if '12:00:00' in item.get('dt_txt', ''):
+                                    break
+                except Exception as fe:
+                    logger.debug(f"Forecast fetch exception: {fe}")
+
+            # Use matched forecast data for the start date if available; otherwise use current weather
+            active_data = target_data or w_data
+
+            if active_data:
+                weather_info = active_data.get('weather', [{}])[0]
+                main_info = active_data.get('main', {})
+                wind_info = active_data.get('wind', {})
                 
-        return {'temp': '25C', 'condition': 'Pleasant & Mild', 'best_months': 'Oct to Apr', 'alert': 'Pleasant travel weather.'}
+                temp_val = round(float(main_info.get('temp', 25)))
+                feels_like_val = round(float(main_info.get('feels_like', temp_val)))
+                temp_min_val = round(float(main_info.get('temp_min', temp_val)))
+                temp_max_val = round(float(main_info.get('temp_max', temp_val)))
+                condition_main = weather_info.get('main', 'Pleasant')
+                description = (weather_info.get('description', '')).capitalize() or condition_main
+                humidity = f"{main_info.get('humidity', 65)}%"
+                wind_speed = f"{round(float(wind_info.get('speed', 2.0)) * 3.6)} km/h"
+                icon = weather_info.get('icon', '02d')
+                
+                # Location name from API if available
+                loc_name = dest_clean
+                if w_data and 'name' in w_data:
+                    country = w_data.get('sys', {}).get('country', '')
+                    loc_name = f"{w_data['name']}{', ' + country if country else ''}"
+
+                # Generate proactive travel alert
+                cond_lower = description.lower()
+                alert = None
+                if 'rain' in cond_lower or 'drizzle' in cond_lower or 'shower' in cond_lower:
+                    alert = f"Rain showers expected on your tour ({description}). Remember to carry an umbrella and waterproof gear."
+                elif 'thunderstorm' in cond_lower or 'storm' in cond_lower:
+                    alert = "Thunderstorms predicted. Check outdoor activity schedules before heading out."
+                elif 'snow' in cond_lower:
+                    alert = "Snowfall expected. Dress in thermal layers and winter footwear."
+                elif temp_val >= 33:
+                    alert = f"High temperature ({temp_val}°C). Stay hydrated and use UV sunscreen during midday sightseeing."
+                elif temp_val <= 10:
+                    alert = f"Chilly weather ({temp_val}°C). Bring warm jackets and layered clothing."
+                else:
+                    alert = f"Ideal conditions for travel ({description}). Great weather for sightseeing!"
+
+                summary = f"{description} with temperatures around {temp_val}°C in {dest_clean}."
+                if date_formatted:
+                    summary = f"Starting {date_formatted}: {description} with temperatures around {temp_val}°C in {dest_clean}."
+
+                return {
+                    'location': loc_name,
+                    'start_date': date_str,
+                    'date_formatted': date_formatted or date_str,
+                    'temp': f"{temp_val}°C",
+                    'feels_like': f"{feels_like_val}°C",
+                    'temp_min': f"{temp_min_val}°C",
+                    'temp_max': f"{temp_max_val}°C",
+                    'condition': description,
+                    'condition_main': condition_main,
+                    'humidity': humidity,
+                    'wind_speed': wind_speed,
+                    'icon': icon,
+                    'icon_url': f"https://openweathermap.org/img/wn/{icon}@2x.png",
+                    'summary': summary,
+                    'alert': alert
+                }
+
+        except Exception as e:
+            logger.warning(f"OpenWeatherMap request failed: {e}")
+
+        # Reliable local fallback
+        return {
+            'location': dest_clean,
+            'start_date': date_str,
+            'date_formatted': date_formatted or date_str,
+            'temp': '26°C',
+            'feels_like': '27°C',
+            'temp_min': '23°C',
+            'temp_max': '29°C',
+            'condition': 'Pleasant & Mild',
+            'condition_main': 'Clear',
+            'humidity': '65%',
+            'wind_speed': '12 km/h',
+            'icon': '02d',
+            'icon_url': 'https://openweathermap.org/img/wn/02d@2x.png',
+            'summary': f"Pleasant travel weather expected for {dest_clean}.",
+            'alert': 'Favorable conditions expected for your tour dates.'
+        }
 
     def predict_approval_probability(self, tour):
         """

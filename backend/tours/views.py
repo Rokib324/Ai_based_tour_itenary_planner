@@ -453,20 +453,27 @@ class TourViewSet(viewsets.ModelViewSet):
         
         # Determine destination intelligently from hotel, flight, ride, package, or tour title
         destination = ""
-        hotel_item = tour.items.filter(hotel__isnull=False).first()
-        flight_item = tour.items.filter(flight__isnull=False).first()
-        ride_item = tour.items.filter(ride__isnull=False).first()
-
-        if hotel_item and hotel_item.hotel:
-            destination = hotel_item.hotel.location
-        elif flight_item and flight_item.flight:
-            destination = flight_item.flight.destination_city
-        elif ride_item and ride_item.ride:
-            destination = ride_item.ride.location
-        elif tour.package:
+        if tour.package and tour.package.destination:
             destination = tour.package.destination
-        elif "to " in tour.title.lower():
-            destination = tour.title.lower().split("to ", 1)[1].split("—")[0].split("-")[0].strip().title()
+        
+        if not destination:
+            hotel_item = tour.items.filter(hotel__isnull=False).first()
+            flight_item = tour.items.filter(flight__isnull=False).first()
+            ride_item = tour.items.filter(ride__isnull=False).first()
+
+            if hotel_item and hotel_item.hotel and hotel_item.hotel.location:
+                destination = hotel_item.hotel.location
+            elif flight_item and flight_item.flight and flight_item.flight.destination_city:
+                destination = flight_item.flight.destination_city
+            elif ride_item and ride_item.ride and ride_item.ride.location:
+                destination = ride_item.ride.location
+
+        if not destination:
+            t_title = tour.title.lower()
+            if "to " in t_title:
+                destination = tour.title.split("to ", 1)[1].split("—")[0].split("-")[0].strip().title()
+            elif "in " in t_title:
+                destination = tour.title.split("in ", 1)[1].split("—")[0].split("-")[0].strip().title()
             
         if not destination:
             destination = "Cox's Bazar"
@@ -474,7 +481,7 @@ class TourViewSet(viewsets.ModelViewSet):
         prob = engine.predict_approval_probability(tour)
         fut_cost = engine.predict_future_cost(tour)
         alts = engine.get_cheaper_alternatives(tour)
-        weather = engine.get_weather_recommendations(destination)
+        weather = engine.get_weather_recommendations(destination, start_date=tour.start_date)
         
         return Response({
             "tour_id": tour.id,

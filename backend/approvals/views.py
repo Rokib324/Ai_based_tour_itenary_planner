@@ -38,7 +38,7 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
         Managers review their respective service checkpoint when it is PENDING.
         """
         user = request.user
-        queryset = TourApproval.objects.exclude(tour__status=Tour.Status.REJECTED)
+        queryset = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED])
 
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             queryset = queryset.filter(admin_status=ApprovalStatus.PENDING)
