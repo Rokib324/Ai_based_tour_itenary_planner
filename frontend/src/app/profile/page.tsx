@@ -283,7 +283,7 @@ export default function ProfilePage() {
                     name="full_name"
                     value={formData.full_name}
                     onChange={handleChange}
-                    placeholder="e.g. Rokibul Islam"
+                    placeholder="Enter your full name"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -295,7 +295,7 @@ export default function ProfilePage() {
                     name="username"
                     value={formData.username}
                     onChange={handleChange}
-                    placeholder="e.g. rokibul324"
+                    placeholder="Enter your display username"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -317,7 +317,7 @@ export default function ProfilePage() {
                     name="phone_number"
                     value={formData.phone_number}
                     onChange={handleChange}
-                    placeholder="e.g. +880 1700 000000"
+                    placeholder="Enter your phone number (e.g. +1 555 000 0000)"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -329,7 +329,7 @@ export default function ProfilePage() {
                     name="city"
                     value={formData.city}
                     onChange={handleChange}
-                    placeholder="e.g. Dhaka, New York, London"
+                    placeholder="Enter your city"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -341,7 +341,7 @@ export default function ProfilePage() {
                     name="country"
                     value={formData.country}
                     onChange={handleChange}
-                    placeholder="e.g. Bangladesh, United Kingdom"
+                    placeholder="Enter your country"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -353,7 +353,7 @@ export default function ProfilePage() {
                     name="address"
                     value={formData.address}
                     onChange={handleChange}
-                    placeholder="e.g. House 42, Road 11, Banani"
+                    placeholder="Enter your street address"
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -365,7 +365,7 @@ export default function ProfilePage() {
                     name="bio"
                     value={formData.bio}
                     onChange={handleChange}
-                    placeholder="Tell service managers and travel partners about yourself..."
+                    placeholder="Write a brief bio about yourself..."
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -437,7 +437,7 @@ export default function ProfilePage() {
                   name="avatar_url"
                   value={formData.avatar_url}
                   onChange={handleChange}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://example.com/avatar.jpg"
                   className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono"
                 />
               </div>
@@ -559,6 +559,7 @@ export default function ProfilePage() {
                     name="old_password"
                     value={passwordData.old_password}
                     onChange={handlePasswordChangeInput}
+                    placeholder="Enter current password"
                     required
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
@@ -571,6 +572,7 @@ export default function ProfilePage() {
                     name="new_password"
                     value={passwordData.new_password}
                     onChange={handlePasswordChangeInput}
+                    placeholder="Enter new password (min. 6 characters)"
                     required
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
@@ -583,6 +585,7 @@ export default function ProfilePage() {
                     name="confirm_password"
                     value={passwordData.confirm_password}
                     onChange={handlePasswordChangeInput}
+                    placeholder="Confirm your new password"
                     required
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-500/50"
                   />
