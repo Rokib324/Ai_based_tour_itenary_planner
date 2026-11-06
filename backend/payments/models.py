@@ -22,6 +22,9 @@ class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def verify_payment(self):
         """
         Unlocks the associated tour upon successful payment verification.
@@ -93,6 +96,9 @@ class Refund(models.Model):
     status = models.CharField(max_length=20, choices=Statuses.choices, default=Statuses.COMPLETED)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"Refund ${self.amount} for {self.service_type} on Tour {self.tour_id} ({self.status})"

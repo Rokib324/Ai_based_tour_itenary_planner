@@ -124,19 +124,19 @@ class ManagerDashboardView(APIView):
         if user.role == User.Roles.FLIGHT_MANAGER:
             status_field = 'flight_status'
             service_type = ManagerApproval.ServiceTypes.FLIGHT
-            inventory_items = FlightService.objects.filter(manager=user)
+            inventory_items = FlightService.objects.filter(manager=user).order_by('-created_at')
         elif user.role == User.Roles.HOTEL_MANAGER:
             status_field = 'hotel_status'
             service_type = ManagerApproval.ServiceTypes.HOTEL
-            inventory_items = HotelService.objects.filter(manager=user)
+            inventory_items = HotelService.objects.filter(manager=user).order_by('-created_at')
         elif user.role == User.Roles.RESTAURANT_MANAGER:
             status_field = 'restaurant_status'
             service_type = ManagerApproval.ServiceTypes.RESTAURANT
-            inventory_items = RestaurantService.objects.filter(manager=user)
+            inventory_items = RestaurantService.objects.filter(manager=user).order_by('-created_at')
         elif user.role == User.Roles.RIDE_MANAGER:
             status_field = 'ride_status'
             service_type = ManagerApproval.ServiceTypes.RIDE
-            inventory_items = RideService.objects.filter(manager=user)
+            inventory_items = RideService.objects.filter(manager=user).order_by('-created_at')
         else: # Admin / SuperAdmin
             status_field = 'admin_status'
             service_type = None
@@ -305,6 +305,9 @@ class ManagerDashboardView(APIView):
                     'actioned_by': 'System / Reviewer'
                 })
 
+        # Ensure LIFO order (latest decisions at the top)
+        decision_history.sort(key=lambda x: x.get('actioned_at') or '', reverse=True)
+
         # Serialize inventory items managed by this user
         serialized_inventory = []
         for item in inventory_items[:20]:
@@ -373,7 +376,7 @@ class AdminDashboardView(APIView):
         
         # 4. Recent activity logs
         recent_logs = []
-        for log in ActivityLog.objects.all()[:10]:
+        for log in ActivityLog.objects.all().order_by('-created_at')[:10]:
             recent_logs.append({
                 'id': log.id,
                 'user_email': log.user.email if log.user else 'Anonymous',

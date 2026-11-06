@@ -50,6 +50,7 @@ interface Tour {
   ai_itinerary?: any;
   approval_workflow?: ApprovalWorkflow | null;
   refunds?: TourRefund[];
+  created_at?: string;
 }
 
 export default function TravelerDashboardPage() {
@@ -107,7 +108,14 @@ export default function TravelerDashboardPage() {
   const fetchTours = async () => {
     try {
       const res = await api.get('tours/tours/');
-      setTours(res.data);
+      const data = Array.isArray(res.data) ? res.data : [];
+      // Guarantee LIFO sorting (newest/highest ID/latest created_at at the top)
+      const sorted = [...data].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
+        return timeB - timeA;
+      });
+      setTours(sorted);
     } catch (err) {
       setError('Failed to fetch your vacation plans.');
     } finally {

@@ -25,6 +25,9 @@ class FlightService(models.Model):
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
         return f"{self.name} ({self.flight_number}) - ${self.price}"
 
@@ -43,6 +46,9 @@ class HotelService(models.Model):
     )
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"{self.name} in {self.location} - ${self.price_per_night}/night"
@@ -63,6 +69,9 @@ class RestaurantService(models.Model):
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
         return f"{self.name} ({self.cuisine}) - ${self.price_per_meal}/meal"
 
@@ -82,6 +91,9 @@ class RideService(models.Model):
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
         return f"{self.vehicle_type} by {self.provider_name} - ${self.price_per_km}/km"
 
@@ -97,6 +109,9 @@ class TourPackage(models.Model):
     cover_image = models.ImageField(upload_to='packages/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"{self.title} - ${self.base_price}"
@@ -176,6 +191,9 @@ class Tour(models.Model):
         # Initial save to establish pk if calculating with items relationship
         super().save(*args, **kwargs)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
         return f"{self.title} by {self.traveler.email} ({self.status})"
 
@@ -198,6 +216,9 @@ class TourItem(models.Model):
     custom_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
         item_type = "Empty Item"

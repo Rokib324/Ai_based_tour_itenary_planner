@@ -28,6 +28,7 @@ class ProfitAnalytics(models.Model):
 
     class Meta:
         verbose_name_plural = "Profit Analytics"
+        ordering = ['-record_date']
 
     def calculate_margin(self):
         if self.total_revenue > 0:

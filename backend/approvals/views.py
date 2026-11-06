@@ -15,19 +15,19 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            return TourApproval.objects.all()
+            return TourApproval.objects.all().order_by('-created_at')
         if user.role == User.Roles.TRAVELER:
-            return TourApproval.objects.filter(tour__traveler=user)
+            return TourApproval.objects.filter(tour__traveler=user).order_by('-created_at')
             
         # Managers can see approvals that involve their services
         if user.role == User.Roles.FLIGHT_MANAGER:
-            return TourApproval.objects.filter(tour__items__flight__isnull=False).distinct()
+            return TourApproval.objects.filter(tour__items__flight__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.HOTEL_MANAGER:
-            return TourApproval.objects.filter(tour__items__hotel__isnull=False).distinct()
+            return TourApproval.objects.filter(tour__items__hotel__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            return TourApproval.objects.filter(tour__items__restaurant__isnull=False).distinct()
+            return TourApproval.objects.filter(tour__items__restaurant__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.RIDE_MANAGER:
-            return TourApproval.objects.filter(tour__items__ride__isnull=False).distinct()
+            return TourApproval.objects.filter(tour__items__ride__isnull=False).distinct().order_by('-created_at')
             
         return TourApproval.objects.none()
 
@@ -38,7 +38,7 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
         Managers review their respective service checkpoint when it is PENDING.
         """
         user = request.user
-        queryset = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED])
+        queryset = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED]).order_by('-created_at')
 
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             queryset = queryset.filter(admin_status=ApprovalStatus.PENDING)

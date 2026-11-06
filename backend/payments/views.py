@@ -194,9 +194,9 @@ class PaymentHistoryListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            return Payment.objects.all()
+            return Payment.objects.all().order_by('-created_at')
         # Travelers see their own payments history
-        return Payment.objects.filter(traveler=user)
+        return Payment.objects.filter(traveler=user).order_by('-created_at')
 
 
 class RefundHistoryListView(generics.ListAPIView):
@@ -206,5 +206,5 @@ class RefundHistoryListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            return Refund.objects.all()
-        return Refund.objects.filter(traveler=user)
+            return Refund.objects.all().order_by('-created_at')
+        return Refund.objects.filter(traveler=user).order_by('-created_at')

@@ -72,12 +72,18 @@ export default function AdminDashboardPage() {
         api.get('auth/pending-approvals/'),
         api.get('approvals/queue/'),
       ]);
+      const usersList = Array.isArray(usersRes.data) ? usersRes.data : [];
+      const toursList = Array.isArray(toursRes.data) ? toursRes.data : [];
       setMetrics(dashRes.data.metrics);
       setFinancials(dashRes.data.financials);
-      setActivityLogs(dashRes.data.recent_activity_logs);
-      setPayments(dashRes.data.recent_payments);
-      setPendingUsers(usersRes.data);
-      setPendingTours(toursRes.data || []);
+      setActivityLogs(dashRes.data.recent_activity_logs || []);
+      setPayments(dashRes.data.recent_payments || []);
+      setPendingUsers([...usersList].sort((a, b) => b.id - a.id));
+      setPendingTours([...toursList].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
+        return timeB - timeA;
+      }));
     } catch (err) {
       setError('Failed to fetch dashboard intelligence.');
     } finally {

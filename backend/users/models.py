@@ -65,6 +65,9 @@ class User(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
+    class Meta:
+        ordering = ['-date_joined']
+
     def __str__(self):
         return f"{self.email} ({self.role} - {self.status})"
 

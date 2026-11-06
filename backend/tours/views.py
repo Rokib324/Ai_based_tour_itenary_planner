@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status 
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.db import models
@@ -262,7 +262,7 @@ class FlightServiceViewSet(viewsets.ModelViewSet):
         serializer.save(manager=self.request.user)
 
     def get_queryset(self):
-        queryset = FlightService.objects.all()
+        queryset = FlightService.objects.all().order_by('-created_at')
         is_available = self.request.query_params.get('available')
         if is_available is not None:
             queryset = queryset.filter(is_available=is_available.lower() == 'true')
@@ -271,18 +271,18 @@ class FlightServiceViewSet(viewsets.ModelViewSet):
             dest = destination.strip()
             dest_qs = queryset.filter(
                 models.Q(destination_city__icontains=dest) | models.Q(departure_city__icontains=dest)
-            )
+            ).order_by('-created_at')
             if not dest_qs.exists():
                 generate_services_for_destination(dest)
                 dest_qs = FlightService.objects.filter(
                     models.Q(destination_city__icontains=dest) | models.Q(departure_city__icontains=dest)
-                )
+                ).order_by('-created_at')
             return dest_qs
         return queryset
 
 
 class HotelServiceViewSet(viewsets.ModelViewSet):
-    queryset = HotelService.objects.all()
+    queryset = HotelService.objects.all().order_by('-created_at')
     serializer_class = HotelServiceSerializer
 
     def get_permissions(self):
@@ -296,23 +296,23 @@ class HotelServiceViewSet(viewsets.ModelViewSet):
         serializer.save(manager=self.request.user)
 
     def get_queryset(self):
-        queryset = HotelService.objects.all()
+        queryset = HotelService.objects.all().order_by('-created_at')
         is_available = self.request.query_params.get('available')
         if is_available is not None:
             queryset = queryset.filter(is_available=is_available.lower() == 'true')
         destination = self.request.query_params.get('destination')
         if destination:
             dest = destination.strip()
-            dest_qs = queryset.filter(location__icontains=dest)
+            dest_qs = queryset.filter(location__icontains=dest).order_by('-created_at')
             if not dest_qs.exists():
                 generate_services_for_destination(dest)
-                dest_qs = HotelService.objects.filter(location__icontains=dest)
+                dest_qs = HotelService.objects.filter(location__icontains=dest).order_by('-created_at')
             return dest_qs
         return queryset
 
 
 class RestaurantServiceViewSet(viewsets.ModelViewSet):
-    queryset = RestaurantService.objects.all()
+    queryset = RestaurantService.objects.all().order_by('-created_at')
     serializer_class = RestaurantServiceSerializer
 
     def get_permissions(self):
@@ -326,23 +326,23 @@ class RestaurantServiceViewSet(viewsets.ModelViewSet):
         serializer.save(manager=self.request.user)
 
     def get_queryset(self):
-        queryset = RestaurantService.objects.all()
+        queryset = RestaurantService.objects.all().order_by('-created_at')
         is_available = self.request.query_params.get('available')
         if is_available is not None:
             queryset = queryset.filter(is_available=is_available.lower() == 'true')
         destination = self.request.query_params.get('destination')
         if destination:
             dest = destination.strip()
-            dest_qs = queryset.filter(location__icontains=dest)
+            dest_qs = queryset.filter(location__icontains=dest).order_by('-created_at')
             if not dest_qs.exists():
                 generate_services_for_destination(dest)
-                dest_qs = RestaurantService.objects.filter(location__icontains=dest)
+                dest_qs = RestaurantService.objects.filter(location__icontains=dest).order_by('-created_at')
             return dest_qs
         return queryset
 
 
 class RideServiceViewSet(viewsets.ModelViewSet):
-    queryset = RideService.objects.all()
+    queryset = RideService.objects.all().order_by('-created_at')
     serializer_class = RideServiceSerializer
 
     def get_permissions(self):
@@ -356,23 +356,23 @@ class RideServiceViewSet(viewsets.ModelViewSet):
         serializer.save(manager=self.request.user)
 
     def get_queryset(self):
-        queryset = RideService.objects.all()
+        queryset = RideService.objects.all().order_by('-created_at')
         is_available = self.request.query_params.get('available')
         if is_available is not None:
             queryset = queryset.filter(is_available=is_available.lower() == 'true')
         destination = self.request.query_params.get('destination')
         if destination:
             dest = destination.strip()
-            dest_qs = queryset.filter(location__icontains=dest)
+            dest_qs = queryset.filter(location__icontains=dest).order_by('-created_at')
             if not dest_qs.exists():
                 generate_services_for_destination(dest)
-                dest_qs = RideService.objects.filter(location__icontains=dest)
+                dest_qs = RideService.objects.filter(location__icontains=dest).order_by('-created_at')
             return dest_qs
         return queryset
 
 
 class TourPackageViewSet(viewsets.ModelViewSet):
-    queryset = TourPackage.objects.filter(is_active=True)
+    queryset = TourPackage.objects.filter(is_active=True).order_by('-created_at')
     serializer_class = TourPackageSerializer
 
     def get_permissions(self):
@@ -396,17 +396,17 @@ class TourViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.role in ['ADMIN', 'SUPER_ADMIN']:
-            return Tour.objects.all()
+            return Tour.objects.all().order_by('-created_at')
         if user.role == 'TRAVELER':
-            return Tour.objects.filter(traveler=user)
+            return Tour.objects.filter(traveler=user).order_by('-created_at')
         if user.role == 'FLIGHT_MANAGER':
-            return Tour.objects.filter(items__flight__isnull=False).distinct()
+            return Tour.objects.filter(items__flight__isnull=False).distinct().order_by('-created_at')
         elif user.role == 'HOTEL_MANAGER':
-            return Tour.objects.filter(items__hotel__isnull=False).distinct()
+            return Tour.objects.filter(items__hotel__isnull=False).distinct().order_by('-created_at')
         elif user.role == 'RESTAURANT_MANAGER':
-            return Tour.objects.filter(items__restaurant__isnull=False).distinct()
+            return Tour.objects.filter(items__restaurant__isnull=False).distinct().order_by('-created_at')
         elif user.role == 'RIDE_MANAGER':
-            return Tour.objects.filter(items__ride__isnull=False).distinct()
+            return Tour.objects.filter(items__ride__isnull=False).distinct().order_by('-created_at')
         return Tour.objects.none()
 
     @action(detail=True, methods=['post'], url_path='resolve-service')

@@ -106,7 +106,7 @@ class PendingApprovalsListView(generics.ListAPIView):
         # Only Admins and Super Admins can list pending users
         if self.request.user.role not in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             return User.objects.none()
-        return User.objects.filter(status=User.Status.PENDING)
+        return User.objects.filter(status=User.Status.PENDING).order_by('-date_joined')
 
 
 class ApproveUserView(APIView):

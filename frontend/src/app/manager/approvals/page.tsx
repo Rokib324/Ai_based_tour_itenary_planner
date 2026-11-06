@@ -32,6 +32,7 @@ interface ApprovalWorkflow {
   restaurant_status: string;
   ride_status: string;
   decision_engine_status: string;
+  created_at?: string;
 }
 
 const CHECKPOINT_ORDER = [
@@ -56,7 +57,13 @@ export default function ApprovalWorkspacePage() {
   const fetchQueue = async () => {
     try {
       const res = await api.get('approvals/queue/');
-      setQueue(res.data);
+      const data = Array.isArray(res.data) ? res.data : [];
+      const sorted = [...data].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
+        return timeB - timeA;
+      });
+      setQueue(sorted);
     } catch (err) {
       console.error('Failed to load pending queue.', err);
     }

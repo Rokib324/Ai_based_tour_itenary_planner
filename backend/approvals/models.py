@@ -28,6 +28,9 @@ class TourApproval(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def run_decision_engine(self):
         """
         Decision Engine Logic:
@@ -99,6 +102,9 @@ class ManagerApproval(models.Model):
     status = models.CharField(max_length=20, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING)
     comments = models.TextField(blank=True, null=True)
     actioned_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-actioned_at']
 
     def __str__(self):
         return f"{self.service_type} approval - Status: {self.status} by {self.manager.email if self.manager else 'System'}"
