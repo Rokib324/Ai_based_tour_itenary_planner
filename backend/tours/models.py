@@ -27,6 +27,10 @@ class FlightService(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['destination_city']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.flight_number}) - ${self.price}"
@@ -49,6 +53,10 @@ class HotelService(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['location']),
+        ]
 
     def __str__(self):
         return f"{self.name} in {self.location} - ${self.price_per_night}/night"
@@ -71,6 +79,10 @@ class RestaurantService(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['location']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.cuisine}) - ${self.price_per_meal}/meal"
@@ -93,6 +105,10 @@ class RideService(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['location']),
+        ]
 
     def __str__(self):
         return f"{self.vehicle_type} by {self.provider_name} - ${self.price_per_km}/km"
@@ -112,6 +128,10 @@ class TourPackage(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['destination']),
+        ]
 
     def __str__(self):
         return f"{self.title} - ${self.base_price}"
@@ -193,6 +213,11 @@ class Tour(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['traveler', '-created_at']),
+            models.Index(fields=['status']),
+        ]
 
     def __str__(self):
         return f"{self.title} by {self.traveler.email} ({self.status})"
@@ -219,6 +244,10 @@ class TourItem(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['tour']),
+        ]
 
     def __str__(self):
         item_type = "Empty Item"

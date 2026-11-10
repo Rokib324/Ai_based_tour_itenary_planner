@@ -71,7 +71,7 @@ export default function ApprovalWorkspacePage() {
 
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 4000);
+    const interval = setInterval(fetchQueue, 8000);
     return () => clearInterval(interval);
   }, []);
 

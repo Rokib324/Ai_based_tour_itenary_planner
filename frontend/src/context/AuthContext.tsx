@@ -46,6 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('cached_user');
     setUser(null);
     setRole(null);
     if (typeof window !== 'undefined') {
@@ -76,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(formattedUser);
       setRole(formattedUser.role);
       localStorage.setItem('user_role', formattedUser.role);
+      localStorage.setItem('cached_user', JSON.stringify(formattedUser));
     } catch (err) {
       logout();
     } finally {
@@ -85,7 +87,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
+    const cachedRole = localStorage.getItem('user_role');
+    const cachedUser = localStorage.getItem('cached_user');
+
     if (token) {
+      // Immediate optimistic hydration for instant zero-wait navigation
+      if (cachedUser) {
+        try {
+          const parsed = JSON.parse(cachedUser);
+          setUser(parsed);
+          setRole(cachedRole || parsed.role);
+          setLoading(false);
+        } catch {
+          // ignore corrupted JSON
+        }
+      }
+      // Revalidate in background (Stale-While-Revalidate pattern)
       refreshUser();
     } else {
       setLoading(false);
@@ -101,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('access_token', access);
       localStorage.setItem('refresh_token', refresh);
       localStorage.setItem('user_role', userData.role);
+      localStorage.setItem('cached_user', JSON.stringify(userData));
       
       setUser(userData);
       setRole(userData.role);

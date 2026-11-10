@@ -108,10 +108,13 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"✓ Loaded {len(rec_res.data)} packages recommended by AI engine."))
 
                 # Create custom tour compilation
+                from datetime import date, timedelta
+                future_start = (date.today() + timedelta(days=10)).isoformat()
+                future_end = (date.today() + timedelta(days=15)).isoformat()
                 tour_data = {
                     "title": "Miami Getaway",
-                    "start_date": "2026-08-01",
-                    "end_date": "2026-08-06",
+                    "start_date": future_start,
+                    "end_date": future_end,
                     "budget_tier": "STANDARD",
                     "items": [
                         {"service_type": "FLIGHT", "flight": flight.id, "quantity": 1},

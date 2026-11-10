@@ -34,7 +34,7 @@ class TravelerDashboardView(APIView):
         total_spent = payments.filter(status=Payment.Statuses.SUCCESSFUL).aggregate(total=Sum('amount'))['total'] or 0.00
         
         # Upcoming tour details and weather
-        upcoming_tour = tours.filter(status__in=[Tour.Status.UNLOCKED, Tour.Status.LOCKED]).order_by('start_date').first()
+        upcoming_tour = tours.filter(status__in=[Tour.Status.UNLOCKED, Tour.Status.LOCKED]).select_related('package').prefetch_related('items__hotel').order_by('start_date').first()
         weather_info = None
         if upcoming_tour:
             # Determine destination for weather lookup
@@ -46,7 +46,7 @@ class TravelerDashboardView(APIView):
                 destination = upcoming_tour.package.destination
                 
             ai = AIEngine()
-            weather_info = ai.get_weather_recommendations(destination)
+            weather_info = ai.get_weather_recommendations(destination, start_date=upcoming_tour.start_date)
             weather_info['destination'] = destination
 
         # Recent 5 tours serialization skeleton
@@ -63,10 +63,10 @@ class TravelerDashboardView(APIView):
             })
 
         recent_payments = []
-        for p in payments.order_by('-created_at')[:5]:
+        for p in payments.select_related('tour').order_by('-created_at')[:5]:
             recent_payments.append({
                 'id': p.id,
-                'tour_title': p.tour.title,
+                'tour_title': p.tour.title if p.tour else '—',
                 'amount': float(p.amount),
                 'status': p.status,
                 'payment_method': p.payment_method,
@@ -147,7 +147,13 @@ class ManagerDashboardView(APIView):
         
         # 1. KPI Counts
         queue_count = active_workflows.filter(**{status_field: ApprovalStatus.PENDING}).count()
-        approved_workflows = workflows.filter(**{status_field: ApprovalStatus.APPROVED})
+        approved_workflows = workflows.filter(**{status_field: ApprovalStatus.APPROVED}).select_related(
+            'tour__traveler'
+        ).prefetch_related(
+            'tour__items__flight', 'tour__items__hotel',
+            'tour__items__restaurant', 'tour__items__ride',
+            'tour__payments'
+        )
         rejected_workflows = workflows.filter(**{status_field: ApprovalStatus.REJECTED})
         
         total_approved = approved_workflows.count()
@@ -243,7 +249,13 @@ class ManagerDashboardView(APIView):
         decision_history = []
         actioned_tour_ids = set()
 
-        logs_query = ManagerApproval.objects.all().order_by('-actioned_at')
+        logs_query = ManagerApproval.objects.all().select_related(
+            'workflow__tour__traveler', 'manager'
+        ).prefetch_related(
+            'workflow__tour__items__flight', 'workflow__tour__items__hotel',
+            'workflow__tour__items__restaurant', 'workflow__tour__items__ride',
+            'workflow__tour__payments'
+        ).order_by('-actioned_at')
         if service_type:
             logs_query = logs_query.filter(models.Q(manager=user) | models.Q(service_type=service_type))
 
@@ -358,43 +370,155 @@ class AdminDashboardView(APIView):
         user = request.user
         if user.role not in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             return Response({"detail": "Permission denied. Admin role required."}, status=status.HTTP_403_FORBIDDEN)
-            
-        # 1. Total registrations & pending registrations
-        total_users = User.objects.count()
-        pending_registrations = User.objects.filter(status=User.Status.PENDING, is_email_verified=True).count()
-        
-        # 2. Tour Metrics
-        total_tours = Tour.objects.count()
+
+        # ── 1. User Metrics ──────────────────────────────────────────────────
+        all_users = User.objects.all().order_by('-date_joined')
+        total_users = all_users.count()
+        pending_registrations = all_users.filter(status=User.Status.PENDING, is_email_verified=True).count()
+
+        from django.db.models import Count as DjCount
+        # Precompute aggregated metrics in bulk to avoid N+1 queries per user
+        tour_counts = dict(
+            Tour.objects.values('traveler_id').annotate(cnt=DjCount('id')).values_list('traveler_id', 'cnt')
+        )
+        user_spents = dict(
+            Payment.objects.filter(status=Payment.Statuses.SUCCESSFUL)
+            .values('traveler_id')
+            .annotate(total=Sum('amount'))
+            .values_list('traveler_id', 'total')
+        )
+
+        # Full users table (for the clickable modal)
+        users_list = []
+        for u in all_users:
+            tour_count = tour_counts.get(u.id, 0)
+            total_spent = user_spents.get(u.id, 0.00) or 0.00
+            users_list.append({
+                'id': u.id,
+                'username': u.username,
+                'email': u.email,
+                'role': u.role,
+                'status': u.status,
+                'is_email_verified': u.is_email_verified,
+                'date_joined': u.date_joined.strftime('%Y-%m-%d') if u.date_joined else '',
+                'tour_count': tour_count,
+                'total_spent': round(float(total_spent), 2),
+            })
+
+        # Role distribution
+        role_distribution = {}
+        for r in all_users.values('role').annotate(c=DjCount('id')):
+            role_distribution[r['role']] = r['c']
+
+        # ── 2. Tour Metrics ──────────────────────────────────────────────────
+        all_tours = Tour.objects.select_related('traveler').order_by('-created_at')
+        total_tours = all_tours.count()
         pending_workflows = TourApproval.objects.filter(decision_engine_status=ApprovalStatus.PENDING).count()
-        
-        # 3. Revenue & Profit Analytics
-        # Only aggregate paid tours (UNLOCKED or COMPLETED)
+
+        # Status distribution
+        tour_status_dist = {}
+        for s in all_tours.values('status').annotate(c=DjCount('id')):
+            tour_status_dist[s['status']] = s['c']
+
+        # Tier distribution
+        tour_tier_dist = {}
+        for s in all_tours.values('budget_tier').annotate(c=DjCount('id')):
+            tour_tier_dist[s['budget_tier']] = s['c']
+
+        # Full tours table
+        tours_list = []
+        for t in all_tours[:100]:
+            tours_list.append({
+                'id': t.id,
+                'title': t.title,
+                'traveler_email': t.traveler.email,
+                'traveler_username': t.traveler.username,
+                'status': t.status,
+                'budget_tier': t.budget_tier,
+                'start_date': str(t.start_date),
+                'end_date': str(t.end_date),
+                'final_price': float(t.final_price),
+                'base_cost': float(t.base_cost),
+                'created_at': t.created_at.strftime('%Y-%m-%d') if t.created_at else '',
+            })
+
+        # ── 3. Revenue & Profit Analytics ────────────────────────────────────
         paid_tours = Tour.objects.filter(status__in=[Tour.Status.UNLOCKED, Tour.Status.COMPLETED])
         total_revenue = paid_tours.aggregate(rev=Sum('final_price'))['rev'] or 0.00
         total_base_cost = paid_tours.aggregate(cost=Sum('base_cost'))['cost'] or 0.00
-        total_profit = total_revenue - total_base_cost
-        
-        # 4. Recent activity logs
+        total_profit = float(total_revenue) - float(total_base_cost)
+
+        # Revenue breakdown by budget tier
+        revenue_by_tier = []
+        for tier_data in paid_tours.values('budget_tier').annotate(
+            rev=Sum('final_price'), cnt=DjCount('id')
+        ).order_by('-rev'):
+            revenue_by_tier.append({
+                'tier': tier_data['budget_tier'],
+                'revenue': float(tier_data['rev'] or 0),
+                'count': tier_data['cnt'],
+            })
+
+        # Revenue by payment method
+        revenue_by_method = []
+        from payments.models import Refund
+        for pm_data in Payment.objects.filter(status=Payment.Statuses.SUCCESSFUL).values('payment_method').annotate(
+            total=Sum('amount'), cnt=DjCount('id')
+        ).order_by('-total'):
+            revenue_by_method.append({
+                'method': pm_data['payment_method'],
+                'revenue': float(pm_data['total'] or 0),
+                'count': pm_data['cnt'],
+            })
+
+        # Revenue by tour status (unlocked vs completed)
+        revenue_by_status = []
+        for s_data in paid_tours.values('status').annotate(
+            rev=Sum('final_price'), cnt=DjCount('id')
+        ):
+            revenue_by_status.append({
+                'status': s_data['status'],
+                'revenue': float(s_data['rev'] or 0),
+                'count': s_data['cnt'],
+            })
+
+        # Payments table (all, not just recent 5)
+        all_payments_list = []
+        for p in Payment.objects.select_related('traveler', 'tour').order_by('-created_at')[:100]:
+            all_payments_list.append({
+                'id': p.id,
+                'traveler_email': p.traveler.email,
+                'traveler_username': p.traveler.username,
+                'tour_title': p.tour.title if p.tour else '—',
+                'tour_id': p.tour_id,
+                'amount': float(p.amount),
+                'status': p.status,
+                'payment_method': p.payment_method,
+                'transaction_id': p.transaction_id or '—',
+                'created_at': p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '',
+            })
+
+        # ── 4. Recent activity logs ──────────────────────────────────────────
         recent_logs = []
-        for log in ActivityLog.objects.all().order_by('-created_at')[:10]:
+        for log in ActivityLog.objects.select_related('user').order_by('-created_at')[:20]:
             recent_logs.append({
                 'id': log.id,
                 'user_email': log.user.email if log.user else 'Anonymous',
                 'action': log.action,
                 'details': log.details,
-                'created_at': log.created_at
+                'created_at': log.created_at,
             })
 
-        # 5. Recent system payments
+        # ── 5. Recent system payments (sidebar) ──────────────────────────────
         recent_payments = []
-        for p in Payment.objects.order_by('-created_at')[:5]:
+        for p in Payment.objects.select_related('traveler').order_by('-created_at')[:8]:
             recent_payments.append({
                 'id': p.id,
                 'traveler_email': p.traveler.email,
                 'amount': float(p.amount),
                 'status': p.status,
                 'payment_method': p.payment_method,
-                'created_at': p.created_at
+                'created_at': p.created_at,
             })
 
         return Response({
@@ -402,16 +526,25 @@ class AdminDashboardView(APIView):
                 "total_users": total_users,
                 "pending_registrations": pending_registrations,
                 "total_tours": total_tours,
-                "pending_approvals": pending_workflows
+                "pending_approvals": pending_workflows,
+                "tour_status_distribution": tour_status_dist,
+                "tour_tier_distribution": tour_tier_dist,
+                "role_distribution": role_distribution,
             },
             "financials": {
                 "total_revenue": float(total_revenue),
                 "total_base_cost": float(total_base_cost),
-                "total_profit": float(total_profit),
-                "profit_margin_percent": round(float((total_profit / total_revenue) * 100), 2) if total_revenue > 0 else 0.00
+                "total_profit": total_profit,
+                "profit_margin_percent": round(float((total_profit / float(total_revenue)) * 100), 2) if total_revenue else 0.00,
+                "revenue_by_tier": revenue_by_tier,
+                "revenue_by_method": revenue_by_method,
+                "revenue_by_status": revenue_by_status,
             },
+            "users_list": users_list,
+            "tours_list": tours_list,
+            "all_payments": all_payments_list,
             "recent_payments": recent_payments,
-            "recent_activity_logs": recent_logs
+            "recent_activity_logs": recent_logs,
         }, status=status.HTTP_200_OK)
 
 

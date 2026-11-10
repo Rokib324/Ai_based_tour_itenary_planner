@@ -24,6 +24,11 @@ class Payment(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['traveler', 'status']),
+            models.Index(fields=['status']),
+        ]
 
     def verify_payment(self):
         """
@@ -99,6 +104,11 @@ class Refund(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['traveler', 'status']),
+            models.Index(fields=['status']),
+        ]
 
     def __str__(self):
         return f"Refund ${self.amount} for {self.service_type} on Tour {self.tour_id} ({self.status})"

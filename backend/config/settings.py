@@ -90,12 +90,44 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 
-# Database configuration (SQLite)
+# Database configuration (SQLite High Performance)
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 20,
+        },
+    }
+}
+
+# High-performance SQLite tuning via connection signal
+from django.db.backends.signals import connection_created
+from django.dispatch import receiver
+
+@receiver(connection_created)
+def configure_sqlite_pragmas(sender, connection, **kwargs):
+    """Enables WAL mode, 64MB memory cache, and memory temp store for fast concurrent reads."""
+    if connection.vendor == 'sqlite':
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA journal_mode = WAL;')
+            cursor.execute('PRAGMA synchronous = NORMAL;')
+            cursor.execute('PRAGMA cache_size = -64000;')
+            cursor.execute('PRAGMA temp_store = MEMORY;')
+            cursor.execute('PRAGMA busy_timeout = 5000;')
+            cursor.execute('PRAGMA mmap_size = 268435456;')
+
+
+# In-Memory Cache configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'smarttravel-cache',
+        'TIMEOUT': 300,
+        'OPTIONS': {
+            'MAX_ENTRIES': 2000,
+        }
     }
 }
 

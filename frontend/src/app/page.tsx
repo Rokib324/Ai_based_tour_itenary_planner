@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 import {
   Compass, Sparkles, ShieldCheck, CreditCard, ArrowRight, Plane,
   MapPin, Star, ChevronDown, Menu, X, Globe, Cloud,
   CheckCircle, Zap, Users, TrendingUp, Hotel, Mountain, FileText,
-  ArrowLeftRight, Calendar, UserCheck, Search, Plus
+  ArrowLeftRight, Calendar, UserCheck, Search, Plus,
+  CalendarDays, Tag, AlertCircle, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -30,7 +32,339 @@ function useCountUp(target: number, duration = 1800) {
 }
 
 /* ─────────────────────────────────────────────
-   TravelSearchForm – standalone component
+   QuickTourForm – Smart Tour Quick-Start
+   Mirrors create-tour page fields exactly.
+   Saves state to sessionStorage, then:
+     - Unauthenticated → /login?redirect=/traveler/create-tour
+     - TRAVELER/ADMIN  → /traveler/create-tour (pre-populated)
+───────────────────────────────────────────── */
+
+const QUICK_DESTINATIONS = [
+  "Cox's Bazar", 'Dhaka', 'Sylhet', 'Chittagong',
+  'London', 'Dubai', 'Bangkok', 'Singapore',
+];
+
+const BUDGET_TIERS_QUICK = [
+  { value: 'BUDGET',   label: 'Budget',   markup: 18, emoji: '💰', desc: 'Best value'    },
+  { value: 'STANDARD', label: 'Standard', markup: 25, emoji: '⭐', desc: 'Quality & cost' },
+  { value: 'LUXURY',   label: 'Luxury',   markup: 32, emoji: '👑', desc: 'Premium'        },
+];
+
+interface QuickFormState {
+  destination: string;
+  tourTitle: string;
+  startDate: string;
+  endDate: string;
+  budgetTier: string;
+  travelers: number;
+  notes: string;
+}
+
+interface QuickFormErrors {
+  destination?: string;
+  tourTitle?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+function getTodayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function QuickTourForm() {
+  const { user, role, loading } = useAuth();
+  const router = useRouter();
+  const today = useRef(getTodayISO()).current;
+
+  const [form, setForm] = useState<QuickFormState>({
+    destination: '',
+    tourTitle: '',
+    startDate: '',
+    endDate: '',
+    budgetTier: 'STANDARD',
+    travelers: 1,
+    notes: '',
+  });
+  const [errors, setErrors] = useState<QuickFormErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  /* Auto-generate tour title when destination changes */
+  useEffect(() => {
+    if (form.destination.trim() && (!form.tourTitle || form.tourTitle.startsWith('My Trip to '))) {
+      setForm(f => ({ ...f, tourTitle: `My Trip to ${form.destination.trim()}` }));
+    }
+  }, [form.destination]);
+
+  const setField = <K extends keyof QuickFormState>(key: K, value: QuickFormState[K]) => {
+    setForm(f => ({ ...f, [key]: value }));
+    if (key in errors) setErrors(e => ({ ...e, [key]: undefined }));
+  };
+
+  const validate = (): boolean => {
+    const e: QuickFormErrors = {};
+    if (!form.destination.trim()) {
+      e.destination = 'Please enter or select a destination.';
+    } else if (form.destination.trim().length < 2) {
+      e.destination = 'Destination must be at least 2 characters.';
+    }
+    if (!form.tourTitle.trim()) {
+      e.tourTitle = 'Please give your tour a title.';
+    }
+    if (!form.startDate) {
+      e.startDate = 'Start date is required.';
+    } else if (form.startDate < today) {
+      e.startDate = 'Start date cannot be in the past.';
+    }
+    if (!form.endDate) {
+      e.endDate = 'End date is required.';
+    } else if (form.startDate && form.endDate < form.startDate) {
+      e.endDate = 'End date must be after start date.';
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    setSubmitting(true);
+
+    /* Persist form data so create-tour page can pre-populate */
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('landingTourFormData', JSON.stringify(form));
+    }
+
+    if (loading) { setSubmitting(false); return; }
+
+    if (!user) {
+      router.push('/login?redirect=/traveler/create-tour');
+    } else if (
+      role === 'TRAVELER' || role === 'ADMIN' || role === 'SUPER_ADMIN'
+    ) {
+      router.push('/traveler/create-tour');
+    } else {
+      /* Manager roles etc. — send to login to switch account */
+      router.push('/login?redirect=/traveler/create-tour');
+    }
+  };
+
+  const FieldError = ({ msg }: { msg?: string }) =>
+    msg ? (
+      <p className="flex items-center gap-1 mt-1 text-xs text-rose-400 font-medium">
+        <AlertCircle className="w-3 h-3 shrink-0" />{msg}
+      </p>
+    ) : null;
+
+  return (
+    <div className="w-full max-w-4xl mx-auto bg-white/[0.97] backdrop-blur-2xl rounded-3xl shadow-2xl shadow-black/40 overflow-visible">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 px-6 pt-5 pb-3 border-b border-gray-100">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+          <Sparkles className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <p className="text-sm font-black text-[#1a2b6b]">Quick Tour Planner</p>
+          <p className="text-[10px] text-gray-400">Fill in the details below and we'll set up your AI-powered itinerary</p>
+        </div>
+        {user && (
+          <span className="ml-auto text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 px-2.5 py-1 rounded-full">
+            Logged in ✓
+          </span>
+        )}
+      </div>
+
+      <div className="px-6 pb-6 pt-4 space-y-4">
+
+        {/* Row 1: Destination + Title */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Destination */}
+          <div>
+            <div className={`flex flex-col border rounded-2xl px-4 py-3 bg-white transition-colors ${errors.destination ? 'border-rose-400' : 'border-gray-200 hover:border-[#1a2b6b]/40'}`}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                <MapPin className="w-2.5 h-2.5" /> Destination <span className="text-rose-400">*</span>
+              </p>
+              <input
+                type="text"
+                value={form.destination}
+                onChange={e => setField('destination', e.target.value)}
+                placeholder="City or country (e.g. Cox's Bazar)"
+                className="text-sm font-bold text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+              />
+            </div>
+            <FieldError msg={errors.destination} />
+            {/* Quick picks */}
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {QUICK_DESTINATIONS.slice(0, 4).map(city => (
+                <button
+                  key={city}
+                  type="button"
+                  onClick={() => setField('destination', city)}
+                  className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-all ${
+                    form.destination.toLowerCase() === city.toLowerCase()
+                      ? 'bg-[#1a2b6b] text-white border-[#1a2b6b]'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-[#1a2b6b]/40'
+                  }`}
+                >
+                  {city}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tour Title */}
+          <div>
+            <div className={`flex flex-col border rounded-2xl px-4 py-3 bg-white transition-colors ${errors.tourTitle ? 'border-rose-400' : 'border-gray-200 hover:border-[#1a2b6b]/40'}`}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                <Tag className="w-2.5 h-2.5" /> Tour Title <span className="text-rose-400">*</span>
+              </p>
+              <input
+                type="text"
+                value={form.tourTitle}
+                onChange={e => setField('tourTitle', e.target.value)}
+                placeholder="e.g. Summer Vacation in Cox's Bazar"
+                maxLength={150}
+                className="text-sm font-bold text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+              />
+            </div>
+            <FieldError msg={errors.tourTitle} />
+          </div>
+        </div>
+
+        {/* Row 2: Dates */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Start Date */}
+          <div>
+            <div className={`flex flex-col border rounded-2xl px-4 py-3 bg-white transition-colors ${errors.startDate ? 'border-rose-400' : 'border-gray-200 hover:border-[#1a2b6b]/40'}`}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                <CalendarDays className="w-2.5 h-2.5" /> Start Date <span className="text-rose-400">*</span>
+              </p>
+              <input
+                type="date"
+                min={today}
+                value={form.startDate}
+                onChange={e => {
+                  const val = e.target.value;
+                  setField('startDate', val);
+                  if (form.endDate && val && form.endDate < val) setField('endDate', val);
+                }}
+                className="text-sm font-bold text-[#1a2b6b] bg-transparent outline-none w-full"
+              />
+            </div>
+            <FieldError msg={errors.startDate} />
+          </div>
+
+          {/* End Date */}
+          <div>
+            <div className={`flex flex-col border rounded-2xl px-4 py-3 bg-white transition-colors ${errors.endDate ? 'border-rose-400' : 'border-gray-200 hover:border-[#1a2b6b]/40'}`}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                <CalendarDays className="w-2.5 h-2.5" /> End Date <span className="text-rose-400">*</span>
+              </p>
+              <input
+                type="date"
+                min={form.startDate || today}
+                value={form.endDate}
+                onChange={e => setField('endDate', e.target.value)}
+                className="text-sm font-bold text-[#1a2b6b] bg-transparent outline-none w-full"
+              />
+            </div>
+            <FieldError msg={errors.endDate} />
+          </div>
+        </div>
+
+        {/* Row 3: Budget Tier + Travelers */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          {/* Budget Tier */}
+          <div className="flex flex-col border border-gray-200 rounded-2xl px-4 py-3 bg-white">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Budget Tier</p>
+            <div className="flex gap-2">
+              {BUDGET_TIERS_QUICK.map(t => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setField('budgetTier', t.value)}
+                  className={`flex-1 flex flex-col items-center py-1.5 rounded-xl border text-[10px] font-bold transition-all ${
+                    form.budgetTier === t.value
+                      ? 'bg-[#1a2b6b] text-white border-[#1a2b6b]'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-[#1a2b6b]/40'
+                  }`}
+                >
+                  <span className="text-base">{t.emoji}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Travelers */}
+          <div className="flex flex-col border border-gray-200 rounded-2xl px-4 py-3 bg-white">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+              <Users className="w-2.5 h-2.5" /> Number of Travelers
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setField('travelers', n)}
+                  className={`w-7 h-7 rounded-lg text-xs font-black border transition-all ${
+                    form.travelers === n
+                      ? 'bg-[#1a2b6b] text-white border-[#1a2b6b]'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-[#1a2b6b]/40'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Notes (optional) */}
+        <div className="border border-gray-200 rounded-2xl px-4 py-3 bg-white">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+            Interests / Notes <span className="text-gray-300 font-normal">(optional)</span>
+          </p>
+          <input
+            type="text"
+            value={form.notes}
+            onChange={e => setField('notes', e.target.value)}
+            placeholder="e.g. Culture & food, adventure, beach, wildlife..."
+            className="text-sm font-semibold text-[#1a2b6b] bg-transparent outline-none w-full placeholder-gray-300"
+          />
+        </div>
+
+        {/* CTA Button */}
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="bg-[#f5a623] hover:bg-[#e09510] disabled:opacity-60 text-white font-black text-base py-3.5 px-14 rounded-2xl transition-all shadow-lg shadow-[#f5a623]/30 hover:shadow-[#f5a623]/50 flex items-center gap-2 hover:scale-105 active:scale-95"
+          >
+            {submitting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Setting up your tour...</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> {user ? 'Create My Tour Plan' : 'Start Planning Free'}</>
+            )}
+          </button>
+        </div>
+
+        {!user && (
+          <p className="text-center text-[11px] text-gray-400">
+            You'll be asked to log in or sign up to continue.{' '}
+            <Link href="/register" className="text-[#1a2b6b] font-bold hover:underline">Create account</Link>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Legacy TravelSearchForm – kept for reference
+   (now replaced by QuickTourForm in hero)
 ───────────────────────────────────────────── */
 const TABS = [
   { id: 'flight', label: 'Flight', icon: '✈' },
@@ -489,7 +823,15 @@ export default function LandingHomePage() {
       {/* HERO */}
       <section className="relative min-h-screen flex flex-col items-center justify-center pb-16 pt-28 overflow-hidden">
         <div className="absolute inset-0">
-          <Image src="/hero_beach.jpg" alt="Luxury tropical beach resort aerial view" fill priority className="object-cover object-center" />
+          <Image
+            src="/hero_beach.jpg"
+            alt="Luxury tropical beach resort aerial view"
+            fill
+            priority
+            sizes="100vw"
+            quality={85}
+            className="object-cover object-center"
+          />
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-[#0c0d10]" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d10]/40 via-transparent to-[#0c0d10]/40" />
         </div>
@@ -512,9 +854,9 @@ export default function LandingHomePage() {
             </p>
           </div>
 
-          {/* ── Search Form ── */}
-          <div className="w-full max-w-5xl">
-            <TravelSearchForm />
+          {/* ── Quick Tour Planner Form ── */}
+          <div className="w-full max-w-4xl">
+            <QuickTourForm />
           </div>
 
           {/* ── Stats + Trust Badges ── */}
@@ -586,7 +928,14 @@ export default function LandingHomePage() {
                 className="group relative overflow-hidden rounded-3xl cursor-pointer block"
                 style={{ aspectRatio: i === 0 || i === 3 ? '4 / 3' : '3 / 4' }}
               >
-                <Image src={dest.image} alt={dest.title} fill className="object-cover object-center group-hover:scale-105 transition-transform duration-700" />
+                <Image
+                  src={dest.image}
+                  alt={dest.title}
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  quality={80}
+                  className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
                   <span className={`text-xs font-bold px-3 py-1 rounded-full border backdrop-blur-md ${tierColor[dest.tier]}`}>{dest.tier}</span>
@@ -641,7 +990,14 @@ export default function LandingHomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div className="relative h-[560px] hidden lg:block">
               <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden">
-                <Image src="/dest_santorini.jpg" alt="Santorini" fill className="object-cover" />
+                <Image
+                  src="/dest_santorini.jpg"
+                  alt="Santorini"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  quality={80}
+                  className="object-cover"
+                />
                 <div className="absolute inset-0 bg-gradient-to-tr from-[#0c0d10]/60 to-transparent" />
               </div>
               <div className="absolute -bottom-6 -right-6 bg-[#161820] border border-white/10 rounded-2xl p-4 w-52 shadow-2xl backdrop-blur-xl">
@@ -697,7 +1053,14 @@ export default function LandingHomePage() {
       <section className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="relative rounded-[2.5rem] overflow-hidden min-h-[400px] flex items-center">
-            <Image src="/dest_bali.jpg" alt="Bali rice terraces" fill className="object-cover" />
+            <Image
+              src="/dest_bali.jpg"
+              alt="Bali rice terraces"
+              fill
+              sizes="100vw"
+              quality={80}
+              className="object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d10]/95 via-[#0c0d10]/80 to-transparent" />
             <div className="relative px-10 py-16 md:px-16">
               <div className="max-w-xl space-y-6">

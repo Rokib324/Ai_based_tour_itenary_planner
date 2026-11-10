@@ -302,6 +302,36 @@ export default function CreateTourPage() {
   const [showHotels, setShowHotels] = useState(true);
   const [showRests, setShowRests] = useState(true);
 
+  /* ── Pre-populate from Landing Page Quick Form (sessionStorage) ── */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = sessionStorage.getItem('landingTourFormData');
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as {
+        destination?: string;
+        tourTitle?: string;
+        startDate?: string;
+        endDate?: string;
+        budgetTier?: string;
+        travelers?: number;
+        notes?: string;
+      };
+      if (saved.destination)  setDestination(saved.destination);
+      if (saved.tourTitle)    setTourTitle(saved.tourTitle);
+      if (saved.startDate)    setStartDate(saved.startDate);
+      if (saved.endDate)      setEndDate(saved.endDate);
+      if (saved.budgetTier)   setBudgetTier(saved.budgetTier);
+      if (saved.travelers && saved.travelers >= 1 && saved.travelers <= 10) setTravelers(saved.travelers);
+      if (saved.notes)        setNotes(saved.notes);
+    } catch {
+      /* ignore invalid JSON */
+    } finally {
+      /* Clear after reading so it doesn't persist across sessions */
+      sessionStorage.removeItem('landingTourFormData');
+    }
+  }, []);
+
   /* ── Fetch Catalogs on Mount ── */
   useEffect(() => {
     (async () => {

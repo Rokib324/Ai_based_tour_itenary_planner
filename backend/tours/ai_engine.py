@@ -175,10 +175,19 @@ class AIEngine:
     def get_weather_recommendations(self, destination, start_date=None):
         """
         Fetches authentic real-time weather and forecast details from OpenWeatherMap API
-        for the given tour destination and starting date.
+        for the given tour destination and starting date with 15-minute in-memory caching.
         """
+        from django.core.cache import cache
+
         dest_clean = (destination or "Cox's Bazar").split(',')[0].strip()
         date_str = str(start_date) if start_date else ""
+
+        # Check in-memory cache first for instant sub-millisecond response
+        cache_key = f"weather_v2_{dest_clean.lower().replace(' ', '_')}_{date_str}"
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return cached_result
+
         date_formatted = ""
         if start_date:
             try:
@@ -194,9 +203,9 @@ class AIEngine:
         api_key = getattr(settings, 'OPENWEATHER_API_KEY', '') or '2d24fc3e13a0fac693f0b0761c2284f8'
 
         try:
-            # 1. Fetch current weather for the destination location
+            # 1. Fetch current weather for the destination location with fast timeout
             weather_url = f"https://api.openweathermap.org/data/2.5/weather?units=metric&q={dest_clean}&appid={api_key}"
-            w_res = requests.get(weather_url, timeout=5)
+            w_res = requests.get(weather_url, timeout=2.5)
             
             w_data = None
             if w_res.status_code == 200:
@@ -207,7 +216,7 @@ class AIEngine:
             if date_str:
                 try:
                     forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?units=metric&q={dest_clean}&appid={api_key}"
-                    f_res = requests.get(forecast_url, timeout=5)
+                    f_res = requests.get(forecast_url, timeout=2.5)
                     if f_res.status_code == 200:
                         f_data = f_res.json()
                         for item in f_data.get('list', []):
@@ -262,7 +271,7 @@ class AIEngine:
                 if date_formatted:
                     summary = f"Starting {date_formatted}: {description} with temperatures around {temp_val}°C in {dest_clean}."
 
-                return {
+                result = {
                     'location': loc_name,
                     'start_date': date_str,
                     'date_formatted': date_formatted or date_str,
@@ -279,12 +288,14 @@ class AIEngine:
                     'summary': summary,
                     'alert': alert
                 }
+                cache.set(cache_key, result, timeout=900)
+                return result
 
         except Exception as e:
             logger.warning(f"OpenWeatherMap request failed: {e}")
 
         # Reliable local fallback
-        return {
+        fallback = {
             'location': dest_clean,
             'start_date': date_str,
             'date_formatted': date_formatted or date_str,
@@ -301,6 +312,8 @@ class AIEngine:
             'summary': f"Pleasant travel weather expected for {dest_clean}.",
             'alert': 'Favorable conditions expected for your tour dates.'
         }
+        cache.set(cache_key, fallback, timeout=300)
+        return fallback
 
     def predict_approval_probability(self, tour):
         """

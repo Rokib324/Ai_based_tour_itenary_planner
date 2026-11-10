@@ -15,21 +15,27 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
-            return TourApproval.objects.all().order_by('-created_at')
-        if user.role == User.Roles.TRAVELER:
-            return TourApproval.objects.filter(tour__traveler=user).order_by('-created_at')
-            
-        # Managers can see approvals that involve their services
-        if user.role == User.Roles.FLIGHT_MANAGER:
-            return TourApproval.objects.filter(tour__items__flight__isnull=False).distinct().order_by('-created_at')
+            qs = TourApproval.objects.all().order_by('-created_at')
+        elif user.role == User.Roles.TRAVELER:
+            qs = TourApproval.objects.filter(tour__traveler=user).order_by('-created_at')
+        elif user.role == User.Roles.FLIGHT_MANAGER:
+            qs = TourApproval.objects.filter(tour__items__flight__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.HOTEL_MANAGER:
-            return TourApproval.objects.filter(tour__items__hotel__isnull=False).distinct().order_by('-created_at')
+            qs = TourApproval.objects.filter(tour__items__hotel__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.RESTAURANT_MANAGER:
-            return TourApproval.objects.filter(tour__items__restaurant__isnull=False).distinct().order_by('-created_at')
+            qs = TourApproval.objects.filter(tour__items__restaurant__isnull=False).distinct().order_by('-created_at')
         elif user.role == User.Roles.RIDE_MANAGER:
-            return TourApproval.objects.filter(tour__items__ride__isnull=False).distinct().order_by('-created_at')
+            qs = TourApproval.objects.filter(tour__items__ride__isnull=False).distinct().order_by('-created_at')
+        else:
+            return TourApproval.objects.none()
             
-        return TourApproval.objects.none()
+        return qs.select_related(
+            'tour__traveler', 'tour__package'
+        ).prefetch_related(
+            'tour__items__flight', 'tour__items__hotel',
+            'tour__items__restaurant', 'tour__items__ride',
+            'tour__refunds', 'manager_logs__manager'
+        )
 
     @action(detail=False, methods=['get'], url_path='queue')
     def queue(self, request):
@@ -38,7 +44,15 @@ class TourApprovalViewSet(viewsets.ModelViewSet):
         Managers review their respective service checkpoint when it is PENDING.
         """
         user = request.user
-        queryset = TourApproval.objects.exclude(tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED]).order_by('-created_at')
+        queryset = TourApproval.objects.exclude(
+            tour__status__in=[Tour.Status.REJECTED, Tour.Status.COMPLETED]
+        ).select_related(
+            'tour__traveler', 'tour__package'
+        ).prefetch_related(
+            'tour__items__flight', 'tour__items__hotel',
+            'tour__items__restaurant', 'tour__items__ride',
+            'tour__refunds', 'manager_logs__manager'
+        ).order_by('-created_at')
 
         if user.role in [User.Roles.ADMIN, User.Roles.SUPER_ADMIN]:
             queryset = queryset.filter(admin_status=ApprovalStatus.PENDING)

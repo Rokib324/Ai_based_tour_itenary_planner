@@ -30,6 +30,10 @@ class TourApproval(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['decision_engine_status']),
+        ]
 
     def run_decision_engine(self):
         """
@@ -105,6 +109,10 @@ class ManagerApproval(models.Model):
 
     class Meta:
         ordering = ['-actioned_at']
+        indexes = [
+            models.Index(fields=['-actioned_at']),
+            models.Index(fields=['status', 'service_type']),
+        ]
 
     def __str__(self):
         return f"{self.service_type} approval - Status: {self.status} by {self.manager.email if self.manager else 'System'}"
